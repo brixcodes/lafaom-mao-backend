@@ -1,0 +1,578 @@
+from fastapi import UploadFile
+import os
+from datetime import datetime, timedelta, timezone
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from jinja2 import Environment, FileSystemLoader
+from pyfcm import FCMNotification
+from src.config import settings
+from src.helper.schemas import AccessTokenType
+from src.helper.model import TokenData
+import httpx
+from src.database import get_session
+from sqlmodel import select
+from celery import shared_task
+import pusher
+import boto3
+from botocore.exceptions import NoCredentialsError
+from fastapi import UploadFile
+import uuid
+
+env = Environment(loader=FileSystemLoader('src/templates'))
+
+
+# Initialize Pusher
+pusher_client = pusher.Pusher(
+    app_id=settings.PUSHER_APP_ID,
+    key=settings.PUSHER_KEY,
+    secret=settings.PUSHER_SECRET,
+    cluster=settings.PUSHER_CLUSTER,
+    ssl=True
+)
+
+push_service = FCMNotification(
+        service_account_file="src/laakam.json",
+        credentials=None,
+        project_id="laakam-487e5"
+    )
+
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id= settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key= settings.AWS_SECRET_ACCESS_KEY,
+    region_name= settings.AWS_REGION
+)
+
+def upload_file_to_s3(file: UploadFile, key: str, public: bool = False):
+    try:
+        extra_args = {'ACL': 'public-read'} if public else {}
+        s3.upload_fileobj(file.file, settings.AWS_BUCKET_NAME, key, ExtraArgs=extra_args)
+        return key
+    except NoCredentialsError:
+        raise RuntimeError("AWS credentials not found")
+
+def get_public_file_url(key: str):
+    return f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+
+def generate_presigned_url(key: str, expires_in: int = 3600):
+    try:
+        url = s3.generate_presigned_url('get_object', {
+            'Bucket': settings.AWS_BUCKET_NAME,
+            'Key': key
+        }, ExpiresIn=expires_in)
+        return url
+    except Exception as e:
+        raise RuntimeError(f"Could not generate presigned URL: {str(e)}")
+
+async def upload_file(file : UploadFile,location: str = "",name :str = "") :
+
+    """
+    This function is used to upload a file to the server. The file is saved 
+    in the src/static directory. If a location is provided, the file is saved 
+    in that location. If a name is provided, the file is saved with that name. 
+    Otherwise, the file is saved with the same name as the original file.
+
+    Args:
+        file (UploadFile): The file to be uploaded
+        location (str): The location where the file should be saved
+        name (str): The name with which the file should be saved
+
+    Returns:
+        A tuple containing the path of the saved file, the name of the saved 
+        file, and the content type of the file
+    """
+    try:
+        path_save = "src/static/uploads"
+        path_save =  path_save + location   
+        
+        if not os.path.exists(path_save):
+                os.makedirs(path_save)
+                
+        path =  "static/uploads" + location      
+        
+        date_time_now = datetime.now().strftime('%H%M%S%f')  
+        name_split =  os.path.splitext(file.filename)     
+        if name == "":
+            name =  file.filename 
+            back_name = name_split[0]
+        else :
+            back_name = name
+            name = f'{name}{name_split[1]}'  
+            
+
+        path = f'{path}/{date_time_now}_{name}'
+        path_save = f'{path_save}/{date_time_now}_{name}'
+        contents = await file.read()
+        with open(path_save, "wb") as f:
+            f.write(contents)
+    
+        return path , back_name , file.content_type
+        
+    except Exception as e:
+        print(e)
+        return None,None,None
+
+
+def upload_private_file(file : UploadFile,location: str = "",name :str = "") :
+
+    """
+    This function is used to upload a file to the server. The file is saved 
+    in the src/static directory. If a location is provided, the file is saved 
+    in that location. If a name is provided, the file is saved with that name. 
+    Otherwise, the file is saved with the same name as the original file.
+
+    Args:
+        file (UploadFile): The file to be uploaded
+        location (str): The location where the file should be saved
+        name (str): The name with which the file should be saved
+
+    Returns:
+        A tuple containing the path of the saved file, the name of the saved 
+        file, and the content type of the file
+    """
+    try:
+        path_save = "src/uploads"
+        path_save =  path_save + location   
+        
+        if not os.path.exists(path_save):
+                os.makedirs(path_save)
+                
+        path =  "uploads" + location      
+        
+        date_time_now = datetime.now().strftime('%H%M%S%f')  
+        name_split =  os.path.splitext(file.filename)     
+        if name == "":
+            name =  file.filename 
+            back_name = name_split[0]
+        else :
+            back_name = name
+            name = f'{name}{name_split[1]}'  
+            
+
+        path = f'{path}/{date_time_now}_{name}'
+        path_save = f'{path_save}/{date_time_now}_{name}'
+        with open(path_save, "wb") as f:
+            f.write(file.file.read())
+    
+        return path , back_name , file.content_type
+        
+    except Exception as e:
+        print(e)
+        return None,None,None
+
+def delete_file(file_path: str):
+    """Delete a file from the static folder."""
+    try:
+        # Construct the full path to the image
+        full_path = os.path.join("src", file_path)
+        
+        # Check if the file exists
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            return {
+                    "message": "File deleted successfully",
+                    "success":True
+                }
+        else:
+            return {
+                    "message": "File not found",
+                    "success":False
+                }
+    
+    except Exception as e:
+        print(e)
+        return {
+                    "message": "Exception has occur",
+                    "success":False
+                }
+
+def save_vod_content(file : UploadFile, app_name: str = "", name :str = "") :
+    
+    headers = {
+                "Content-Type": "multipart/form-data",
+                'Accept': 'application/json'
+            }
+    
+    url = f"http://{settings.ANT_MEDIA_URL}/{app_name}/rest/v2/vods/create?name={name}"
+    
+    data = {
+        file : file.file
+    }
+    
+    if settings.ANT_MEDIA_TOKEN != "" :
+        headers["Authorization"] = f"Bearer {settings.ANT_MEDIA_TOKEN}"
+
+    with httpx.Client() as client:
+        response =  client.post(url, json= data, headers=headers)  
+            
+        if response.status_code == 200 :
+            response_json = response.json()
+            
+            print(response_json)
+            return {
+                "message": "Saved successfully",
+                "success":True
+            }
+            
+        elif response.status_code == 401 :
+            print("Unauthorized")
+            
+            return {
+                "message": "Un authorized",
+                "success": False
+            }
+            
+        else :
+            print(response.status_code)
+            print(response.text)
+            
+            return {
+                "message": "Exception has occur",
+                "success":False
+            }
+
+
+def get_access_token(token_type: str = AccessTokenType.WHATSAPP) -> str | None:
+    """
+    Get an access token from the token table or if the token is not found, fetch one from the API.
+
+    Args:
+        token_type (str): The type of token to get, either whatsapp or pesu_pay.
+            Defaults to AccessTokenType.WHATSAPP.
+
+    Returns:
+        str: The access token, or None if it could not be fetched.
+    """
+    session_gen = get_session() 
+    session = next(session_gen)
+    
+    statement = select(TokenData).where(TokenData.token_type == token_type).where(TokenData.expires_at >= datetime.now(timezone.utc)).order_by(TokenData.id.desc())
+    token =  session.exec(statement).first()
+    if token is not None:
+        return token.token_string  
+
+    data = {
+        "grant_type": "client_credentials",
+        "scope": "*",
+    }
+    url = ""
+    if token_type == AccessTokenType.WHATSAPP:
+        data["client_id"] = settings.TOUPESU_WHATSAPP_CLIENT_ID
+        data["client_secret"] = settings.TOUPESU_WHATSAPP_CLIENT_SECRET
+        url = settings.TOUPESU_WHATSAPP_URL + "/oauth/token"
+        
+    elif token_type == AccessTokenType.PESU_PAY:
+        data["client_id"] = settings.TOUPESU_PESU_PAY_CLIENT_ID
+        data["client_secret"] = settings.TOUPESU_PESU_PAY_CLIENT_SECRET
+        url = settings.TOUPESU_PESU_PAY_URL + "/oauth/token"
+        
+    elif token_type == AccessTokenType.TOUPESU:
+        data["client_id"] = settings.TOUPESU_CLIENT_ID
+        data["client_secret"] = settings.TOUPESU_CLIENT_SECRET
+        url = settings.TOUPESU_URL + "/oauth/token"    
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    with httpx.Client(verify=False) as client:
+        response =   client.post(url, json=data, headers=headers)
+        
+    
+        if response.status_code == 200:
+            try :
+                response_json =   response.json()
+                if "access_token" in response_json:
+                    token = TokenData(
+                        token_string=response_json["access_token"],
+                        expires_at=datetime.now(timezone.utc) + timedelta(seconds=response_json["expires_in"]),
+                        token_type=token_type,
+                    )
+                    
+                    session.add(token)
+                    session.commit()
+                    return token.token_string    
+            except Exception as e:  
+                print(e)
+                return None
+
+
+    return None
+
+
+class NotificationHelper :
+    @staticmethod
+    @shared_task  
+    def send_in_app_notification(notify_data : dict):
+        """
+        Send an in app notification to a user, given the notification data.
+
+        Args:
+        data (Notification): The notification data.
+
+        Returns:
+        None
+        """
+        
+        #print(notify_data)
+        #data = {
+        #    "channel": "notify-" + notify_data["user_id"],   
+        #    "content" :  {
+        #        "type":"notification",
+        #        "data": notify_data
+        #    }
+        #}
+        
+        #NotificationHelper.send_ws_message(data=data)
+        
+        NotificationHelper.send_push_notification(data=notify_data)
+
+
+    @staticmethod
+    def send_in_app_message(message_data : dict):
+        """
+        Send a message to a channel in the websocket, given the channel message data.
+
+        Args:
+        data (ChannelMessage): The message data.
+
+        Returns:
+        None
+        """
+        
+        #data = {
+        #    "channel":  message_data["channel_id"],
+        #    "content" :  {
+        #        "type":"message",
+        #        "data": message_data
+        #    }    
+        #}
+        
+        #NotificationHelper.send_ws_message(data=data)
+        
+        NotificationHelper.send_pusher_message(message_data=message_data)
+        
+        return True
+
+
+    @staticmethod
+    def send_ws_message(data : dict): 
+        
+        """
+        Send a message to a channel in the websocket, given the message data.
+
+        Args:
+        data (dict): The message data.
+
+        Returns:
+        None
+        """
+        headers = {
+                "Content-Type": "application/json",
+                'Accept': 'application/json'
+            }
+        url = f"http://{settings.WEBSOCKET_HOST}/broadcast"
+        if settings.WEBSOCKET_TOKEN != "" :
+            url = url + "?key=" + settings.WEBSOCKET_TOKEN
+            
+        
+        try :    
+
+            with httpx.Client() as client:
+                response =  client.post(url, json= data, headers=headers)  
+                
+                if response.status_code == 200 :
+                    response_json = response.json()
+                    print(response_json)
+                elif response.status_code == 401 :
+                    print("Unauthorized")
+                    
+                else :
+                    print(response.status_code)
+                    print(response.text) 
+
+        except Exception as e:
+            print(e)
+
+    @staticmethod
+    def send_pusher_message(data : dict): 
+        
+        """
+            Send a message to a channel through Pusher, given the message data.
+
+            Args:
+            data (dict): The message data.
+
+            Returns:
+            None
+        """
+        
+        pusher_client.trigger(channels=data["channel_id"], event_name='new-message', data=data)
+
+
+    @staticmethod
+    @shared_task  
+    def send_push_notification(notify_data : dict):
+        """
+            Send an in app notification to a user, given the notification data.
+
+            Args:
+            data (Notification): The notification data.
+
+            Returns:
+            None
+        """
+        
+        #data = {
+        #    "channel": "notify-" + notify_data["user_id"],   
+        #    "content" :  {
+        #        "type":"notification",
+        #        "data": notify_data
+        #    }
+        #}
+        
+        #NotificationHelper.send_ws_message(data=data)
+        
+        print(notify_data)
+        response = push_service.notify( 
+                fcm_token=notify_data["device_id"],
+                notification_title=notify_data["title"],
+                notification_body=notify_data["message"],
+                notification_image=notify_data["image"],
+                data_payload=notify_data["action"]
+            )
+        
+
+
+
+    @staticmethod   
+    @shared_task       
+    def send_whatsapp_message(data = dict): 
+        
+        token =   get_access_token(AccessTokenType.WHATSAPP)
+        headers = {
+                "Content-Type": "application/json",
+                'Accept': 'application/json',
+                "Authorization": f"Bearer {token}"
+            }
+        
+        url = f"{settings.TOUPESU_WHATSAPP_URL}/api/v1/post-message"
+
+        with httpx.Client() as client:
+            response =  client.post(url, json= data, headers=headers)  
+            
+            if response.status_code == 200 :
+                response_json =  response.json()
+                print(response_json)
+            elif response.status_code == 401 :
+                print("Unauthorized")
+                
+            else :
+                print(response.status_code)
+                print(response.text)    
+
+
+    @staticmethod  
+    @shared_task      
+    def send_smtp_email(data : dict):
+    
+        """
+        Send an email using SMTP.
+
+        This function sends an email to the given address using an SMTP server.
+        The email body can be either a plain text string or an HTML string
+        rendered from a template.
+
+        Args:
+        to_email (str): The email address to send the email to.
+        subject (str): The email subject.
+        body (str): The email body (optional).
+        template_name (str): The name of the template to use for the email body (optional).
+        context (dict): The context to pass to the template (optional).
+
+        Returns:
+        None
+        """
+        message = MIMEMultipart()
+        message["From"] = settings.EMAILS_FROM_EMAIL
+        message["To"] = data["to_email"]
+        message["Subject"] =  data["subject"]
+
+        if data["template_name"] :
+            template = env.get_template(data["lang"] + "/" + data["template_name"])
+            body = template.render(data["context"])
+
+        message.attach(MIMEText(body, "html" if data["template_name"] else "plain"))     
+            
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                server.starttls()
+                
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.send_message(message)
+                
+                print('email send ' + data["to_email"] )
+                
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"Authentication error: {e}")
+        except Exception as e:
+            print(f"An error occurred: {e}")    
+
+
+    @staticmethod  
+    @shared_task
+    def send_mailgun_email(data: dict):
+        """
+        Send an email using Mailgun API.
+
+        This function sends an email to the given address using the Mailgun API.
+        The email body can be either a plain text string or an HTML string
+        rendered from a template.
+
+        Args:
+        data (dict): A dictionary containing:
+            - to_email (str): The email address to send the email to.
+            - subject (str): The email subject.
+            - body (str): The email body (optional).
+            - template_name (str): The name of the template to use for the email body (optional).
+            - context (dict): The context to pass to the template (optional).
+
+        Returns:
+        None
+        """
+        # Prepare the body
+        body = data.get("body", "")
+    
+        if data.get("template_name") :
+            template = env.get_template(data["lang"] + "/"  + data["template_name"])
+            body = template.render(data["context"])
+            
+        url = f"https://{settings.MAILGUN_ENDPOINT}/v3/{settings.MAILGUN_DOMAIN}/messages"
+
+        # Email payload
+        payload = {
+            "from": settings.EMAILS_FROM_EMAIL,
+            "to": data["to_email"],
+            "subject": data["subject"],
+            "text": body if not data.get("template_name") else None,
+            "html": body if data.get("template_name") else None,
+        }
+        
+    
+        
+        try:
+            with httpx.Client() as client:
+                response =   client.post(url, data=payload,auth=("api", settings.MAILGUN_SECRET))
+            
+                if response.status_code == 200:
+                    
+                    print(f"Email sent successfully to {data['to_email']} with Mailgun API")
+                else:
+                    print(f"Failed to send email: {response.status_code} - {response.text} with Mailgun API")
+
+
+        except httpx.HTTPError as e:
+            print(f"An error occurred while sending the email: {e}")

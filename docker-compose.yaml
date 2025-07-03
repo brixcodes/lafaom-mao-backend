@@ -1,0 +1,47 @@
+
+x-app-base: &app-base
+  build: .
+  image: laakam_base_app
+  env_file:
+    - .env
+  volumes:
+    - .:/app
+  networks:
+    - database_network
+    - redis_network
+
+services:
+  celery_worker:
+    <<: *app-base
+    command: /start-celeryworker
+
+  celery_beat:
+    <<: *app-base
+    command: /start-celerybeat
+    volumes:
+      - .:/app
+      - celery-beat:/app/celerybeat
+
+  app:
+    <<: *app-base
+    command: /start
+    ports:
+      - "5500:8000"
+    volumes:
+      - .:/app
+      - app-uploads:/app/src/static/uploads
+      - app-uploads-2:/app/src/uploads
+
+volumes:
+    celery-beat:
+    app-uploads:
+    app-uploads-2:
+
+networks:
+  laakam_network:
+  database_network:
+    name: afrolancer_backend_database_network
+    external: true
+  redis_network:
+    name: afrolancer_backend_redis_network
+    external: true

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+exec celery -A src.main.celery worker --loglevel=info
