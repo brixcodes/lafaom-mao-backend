@@ -19,7 +19,7 @@ services:
     <<: *app-base
     command: /start
     ports:
-      - "5500:8000"
+      - "5050:8000"
     volumes:
       - .:/app
       - app-uploads:/app/src/static/uploads
