@@ -26,7 +26,6 @@ services:
       - app-uploads-2:/app/src/uploads
 
 volumes:
-    celery-beat:
     app-uploads:
     app-uploads-2:
 
