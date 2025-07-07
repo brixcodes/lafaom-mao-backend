@@ -1,7 +1,7 @@
 
 x-app-base: &app-base
   build: .
-  image: laakam_base_app
+  image: laakam_iam_base_app
   env_file:
     - .env
   volumes:
@@ -14,13 +14,6 @@ services:
   celery_worker:
     <<: *app-base
     command: /start-celeryworker
-
-  celery_beat:
-    <<: *app-base
-    command: /start-celerybeat
-    volumes:
-      - .:/app
-      - celery-beat:/app/celerybeat
 
   app:
     <<: *app-base
