@@ -98,9 +98,7 @@ class Settings(BaseSettings):
     
     CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_RESULT_BACKEND: str =  "redis://127.0.0.1:6379/0"
-    
-    CELERY_FLOWER_USER : str = "afrolancer"
-    CELERY_FLOWER_PASSWORD: str =  "azerty"
+
     
     AWS_ACCESS_KEY_ID : str = ""
     AWS_SECRET_ACCESS_KEY : str = ""
