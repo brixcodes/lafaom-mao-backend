@@ -8,7 +8,6 @@ x-app-base: &app-base
     - .:/app
   networks:
     - database_network
-    - redis_network
 
 services:
   celery_worker:
@@ -30,10 +29,6 @@ volumes:
     app-uploads-2:
 
 networks:
-  laakam_network:
   database_network:
     name: afrolancer_backend_database_network
-    external: true
-  redis_network:
-    name: afrolancer_backend_redis_network
     external: true
