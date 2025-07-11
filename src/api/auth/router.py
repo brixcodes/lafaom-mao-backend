@@ -161,7 +161,7 @@ async def register(
 async def validate_account(response: Response,
     validate_input: ValidateAccountInput, user_service : Annotated[UserService , Depends()], token_service : Annotated[AuthService, Depends()]
 ):
-    if validate_input.email == None:
+    if validate_input.email != None:
         user_email = await  user_service.get_by_email(validate_input.email)
         if user_email:
             raise HTTPException(
@@ -172,7 +172,7 @@ async def validate_account(response: Response,
                     ).model_dump()
             )
             
-    elif validate_input.phone_number == None:    
+    elif validate_input.phone_number != None:    
         user_phone = await  user_service.get_by_phone(validate_input.phone_number)
         if user_phone:
             raise HTTPException(

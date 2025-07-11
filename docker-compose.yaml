@@ -1,4 +1,3 @@
-
 x-app-base: &app-base
   build: .
   image: laakam_iam_base_app
