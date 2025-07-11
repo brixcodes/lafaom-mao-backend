@@ -6,15 +6,9 @@ x-app-base: &app-base
     - .env
   volumes:
     - .:/app
-  networks:
-    - redis_network
+
 
 services:
-
-  redis:
-    image: redis:7.0.8-alpine
-    networks:
-      - redis_network
       
   celery_worker:
     <<: *app-base
@@ -34,6 +28,5 @@ volumes:
     app-uploads:
     app-uploads-2:
 
-networks:
-  redis_network:
+
 
