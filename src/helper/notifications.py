@@ -1,8 +1,8 @@
 from typing import Optional
 from pydantic import BaseModel,EmailStr
-
+from src.config import settings
 from src.api.user.models import NotificationChannel
-from src.helper.schemas import WhatsappMessage, WhatsappParameter, WhatsappTemplate
+from src.helper.schemas import EMAIL_CHANNEL, WhatsappMessage, WhatsappParameter, WhatsappTemplate
 
 from src.helper.utils import NotificationHelper
 
@@ -25,8 +25,10 @@ class NotificationBase(BaseModel):
     def send_notification(self) :
         if (self.prefer_notification == NotificationChannel.EMAIL and self.email != None) or self.email != None : 
             data = self.email_data()
-            #NotificationHelper.send_mailgun_email.delay( data)
-            NotificationHelper.send_smtp_email.delay( data)
+            if settings.EMAIL_CHANNEL == EMAIL_CHANNEL.SMTP :
+                NotificationHelper.send_smtp_email.delay( data)
+            else : 
+                NotificationHelper.send_mailgun_email.delay( data)
             return True
             
         elif (self.prefer_notification == NotificationChannel.WHATSAPP and self.phone_number != None) or  self.phone_number != None  :

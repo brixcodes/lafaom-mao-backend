@@ -13,65 +13,131 @@ import httpx
 from src.database import get_session
 from sqlmodel import select
 from celery import shared_task
-import pusher
 import boto3
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError 
 from fastapi import UploadFile
-import uuid
-
-env = Environment(loader=FileSystemLoader('src/templates'))
 
 
-# Initialize Pusher
-pusher_client = pusher.Pusher(
-    app_id=settings.PUSHER_APP_ID,
-    key=settings.PUSHER_KEY,
-    secret=settings.PUSHER_SECRET,
-    cluster=settings.PUSHER_CLUSTER,
-    ssl=True
-)
 
-push_service = FCMNotification(
-        service_account_file="src/laakam.json",
-        credentials=None,
-        project_id="laakam-487e5"
+
+def get_s3_client():
+    return boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_REGION,
     )
 
 
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id= settings.AWS_ACCESS_KEY_ID,
-    aws_secret_access_key= settings.AWS_SECRET_ACCESS_KEY,
-    region_name= settings.AWS_REGION
-)
+def sanitize_filename(name: str) -> str:
+    return re.sub(r'[^\w\-_\.]', '_', name)
 
-def upload_file_to_s3(file: UploadFile, key: str, public: bool = False):
+async def upload_file_to_s3(file: UploadFile, location: str = "", name: str = "", public: bool = False):
     try:
-        extra_args = {'ACL': 'public-read'} if public else {}
-        s3.upload_fileobj(file.file, settings.AWS_BUCKET_NAME, key, ExtraArgs=extra_args)
-        return key
+        if file.size > settings.MAX_FILE_SIZE:
+            raise ValueError(f"File size exceeds limit of {settings.MAX_FILE_SIZE} bytes")
+
+        path = location.strip("/")
+        date_time_now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name_split = os.path.splitext(file.filename)
+
+        if not name:
+            name = sanitize_filename(name_split[0])
+            back_name = name
+        else:
+            back_name = sanitize_filename(name)
+            name = f"{back_name}{name_split[1]}"
+
+        full_path = f"{path}/{date_time_now}_{name}_s3" if path else f"{date_time_now}_{name}_s3"
+        extra_args = {}  # Removed ACL for modern S3 buckets
+
+        s3 = get_s3_client()
+        await file.seek(0)  # Ensure file pointer is at start
+        s3.upload_fileobj(file.file, settings.AWS_BUCKET_NAME, full_path, ExtraArgs=extra_args)
+
+        public_url = f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{full_path}"
+
+        return (public_url if public else full_path), back_name, file.content_type
+
+    except NoCredentialsError:
+        raise RuntimeError("AWS credentials are missing or invalid")
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "NoSuchBucket":
+            raise RuntimeError(f"Bucket {settings.AWS_BUCKET_NAME} does not exist")
+        raise RuntimeError(f"S3 upload failed: {str(e)}")
+    except BotoCoreError as e:
+        raise RuntimeError(f"S3 error: {str(e)}")
+
+
+def delete_file_from_s3(key: str) -> bool:
+    """
+    Delete a file from an S3 bucket.
+
+    Args:
+        key (str): The S3 key (path) of the file to delete (e.g., 'folder/20250710_183045_example.txt').
+
+    Returns:
+        bool: True if the file was deleted successfully, False if the file was not found.
+
+    Raises:
+        RuntimeError: If AWS credentials are missing or another S3 error occurs.
+    """
+    try:
+        s3 = get_s3_client()
+        s3.delete_object(Bucket=settings.AWS_BUCKET_NAME, Key=key.strip("/"))
+        return True
+
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            return False  # File doesn't exist
+        raise RuntimeError(f"Failed to delete file from S3: {str(e)}")
     except NoCredentialsError:
         raise RuntimeError("AWS credentials not found")
+    except BotoCoreError as e:
+        raise RuntimeError(f"S3 error: {str(e)}")
 
 def get_public_file_url(key: str):
     return f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
+
 def generate_presigned_url(key: str, expires_in: int = 3600):
     try:
-        url = s3.generate_presigned_url('get_object', {
-            'Bucket': settings.AWS_BUCKET_NAME,
-            'Key': key
-        }, ExpiresIn=expires_in)
+        s3 =s3 = get_s3_client();
+        url = s3.generate_presigned_url(
+            "get_object",
+            {"Bucket": settings.AWS_BUCKET_NAME, "Key": key},
+            ExpiresIn=expires_in,
+        )
         return url
     except Exception as e:
         raise RuntimeError(f"Could not generate presigned URL: {str(e)}")
 
-async def upload_file(file : UploadFile,location: str = "",name :str = "") :
+async def upload_file(file: UploadFile, location: str = "", name: str = ""):
+    if settings.STORAGE_LOCATION == "local":
+        return upload_file_local(file, location, name)
+    else:
+        upload_file_to_s3(file, location, name, public=True)
 
+
+def upload_private_file(file: UploadFile, location: str = "", name: str = ""):
+    if settings.STORAGE_LOCATION == "local":
+        return upload_file_local(file, location, name)
+    else:
+        upload_file_to_s3(file, location, name, public=False)
+
+def delete_file(file_path: str):
+    if settings.STORAGE_LOCATION == "local":
+        return delete_file_local(file_path)
+    else:
+        return delete_file_from_s3(file_path)
+
+
+async def upload_file_local(file: UploadFile, location: str = "", name: str = ""):
     """
-    This function is used to upload a file to the server. The file is saved 
-    in the src/static directory. If a location is provided, the file is saved 
-    in that location. If a name is provided, the file is saved with that name. 
+    This function is used to upload a file to the server. The file is saved
+    in the src/static directory. If a location is provided, the file is saved
+    in that location. If a name is provided, the file is saved with that name.
     Otherwise, the file is saved with the same name as the original file.
 
     Args:
@@ -80,47 +146,45 @@ async def upload_file(file : UploadFile,location: str = "",name :str = "") :
         name (str): The name with which the file should be saved
 
     Returns:
-        A tuple containing the path of the saved file, the name of the saved 
+        A tuple containing the path of the saved file, the name of the saved
         file, and the content type of the file
     """
     try:
         path_save = "src/static/uploads"
-        path_save =  path_save + location   
-        
-        if not os.path.exists(path_save):
-                os.makedirs(path_save)
-                
-        path =  "static/uploads" + location      
-        
-        date_time_now = datetime.now().strftime('%H%M%S%f')  
-        name_split =  os.path.splitext(file.filename)     
-        if name == "":
-            name =  file.filename 
-            back_name = name_split[0]
-        else :
-            back_name = name
-            name = f'{name}{name_split[1]}'  
-            
+        path_save = path_save + location
 
-        path = f'{path}/{date_time_now}_{name}'
-        path_save = f'{path_save}/{date_time_now}_{name}'
+        if not os.path.exists(path_save):
+            os.makedirs(path_save)
+
+        path = "static/uploads" + location
+
+        date_time_now = datetime.now().strftime("%H%M%S%f")
+        name_split = os.path.splitext(file.filename)
+        if name == "":
+            name = file.filename
+            back_name = name_split[0]
+        else:
+            back_name = name
+            name = f"{name}{name_split[1]}"
+
+        path = f"{path}/{date_time_now}_{name}"
+        path_save = f"{path_save}/{date_time_now}_{name}"
         contents = await file.read()
         with open(path_save, "wb") as f:
             f.write(contents)
-    
-        return path , back_name , file.content_type
-        
+
+        return path, back_name, file.content_type
+
     except Exception as e:
         print(e)
-        return None,None,None
+        return None, None, None
 
 
-def upload_private_file(file : UploadFile,location: str = "",name :str = "") :
-
+def upload_private_file_local(file: UploadFile, location: str = "", name: str = ""):
     """
-    This function is used to upload a file to the server. The file is saved 
-    in the src/static directory. If a location is provided, the file is saved 
-    in that location. If a name is provided, the file is saved with that name. 
+    This function is used to upload a file to the server. The file is saved
+    in the src/static directory. If a location is provided, the file is saved
+    in that location. If a name is provided, the file is saved with that name.
     Otherwise, the file is saved with the same name as the original file.
 
     Args:
@@ -129,109 +193,55 @@ def upload_private_file(file : UploadFile,location: str = "",name :str = "") :
         name (str): The name with which the file should be saved
 
     Returns:
-        A tuple containing the path of the saved file, the name of the saved 
+        A tuple containing the path of the saved file, the name of the saved
         file, and the content type of the file
     """
     try:
         path_save = "src/uploads"
-        path_save =  path_save + location   
-        
-        if not os.path.exists(path_save):
-                os.makedirs(path_save)
-                
-        path =  "uploads" + location      
-        
-        date_time_now = datetime.now().strftime('%H%M%S%f')  
-        name_split =  os.path.splitext(file.filename)     
-        if name == "":
-            name =  file.filename 
-            back_name = name_split[0]
-        else :
-            back_name = name
-            name = f'{name}{name_split[1]}'  
-            
+        path_save = path_save + location
 
-        path = f'{path}/{date_time_now}_{name}'
-        path_save = f'{path_save}/{date_time_now}_{name}'
+        if not os.path.exists(path_save):
+            os.makedirs(path_save)
+
+        path = "uploads" + location
+
+        date_time_now = datetime.now().strftime("%H%M%S%f")
+        name_split = os.path.splitext(file.filename)
+        if name == "":
+            name = file.filename
+            back_name = name_split[0]
+        else:
+            back_name = name
+            name = f"{name}{name_split[1]}"
+
+        path = f"{path}/{date_time_now}_{name}"
+        path_save = f"{path_save}/{date_time_now}_{name}"
         with open(path_save, "wb") as f:
             f.write(file.file.read())
-    
-        return path , back_name , file.content_type
-        
+
+        return path, back_name, file.content_type
+
     except Exception as e:
         print(e)
-        return None,None,None
+        return None, None, None
 
-def delete_file(file_path: str):
+
+def delete_file_local(file_path: str):
     """Delete a file from the static folder."""
     try:
         # Construct the full path to the image
         full_path = os.path.join("src", file_path)
-        
+
         # Check if the file exists
         if os.path.exists(full_path):
             os.remove(full_path)
-            return {
-                    "message": "File deleted successfully",
-                    "success":True
-                }
+            return {"message": "File deleted successfully", "success": True}
         else:
-            return {
-                    "message": "File not found",
-                    "success":False
-                }
-    
+            return {"message": "File not found", "success": False}
+
     except Exception as e:
         print(e)
-        return {
-                    "message": "Exception has occur",
-                    "success":False
-                }
-
-def save_vod_content(file : UploadFile, app_name: str = "", name :str = "") :
-    
-    headers = {
-                "Content-Type": "multipart/form-data",
-                'Accept': 'application/json'
-            }
-    
-    url = f"http://{settings.ANT_MEDIA_URL}/{app_name}/rest/v2/vods/create?name={name}"
-    
-    data = {
-        file : file.file
-    }
-    
-    if settings.ANT_MEDIA_TOKEN != "" :
-        headers["Authorization"] = f"Bearer {settings.ANT_MEDIA_TOKEN}"
-
-    with httpx.Client() as client:
-        response =  client.post(url, json= data, headers=headers)  
-            
-        if response.status_code == 200 :
-            response_json = response.json()
-            
-            print(response_json)
-            return {
-                "message": "Saved successfully",
-                "success":True
-            }
-            
-        elif response.status_code == 401 :
-            print("Unauthorized")
-            
-            return {
-                "message": "Un authorized",
-                "success": False
-            }
-            
-        else :
-            print(response.status_code)
-            print(response.text)
-            
-            return {
-                "message": "Exception has occur",
-                "success":False
-            }
+        return {"message": "Exception has occur", "success": False}
 
 
 def get_access_token(token_type: str = AccessTokenType.WHATSAPP) -> str | None:
@@ -263,15 +273,6 @@ def get_access_token(token_type: str = AccessTokenType.WHATSAPP) -> str | None:
         data["client_secret"] = settings.TOUPESU_WHATSAPP_CLIENT_SECRET
         url = settings.TOUPESU_WHATSAPP_URL + "/oauth/token"
         
-    elif token_type == AccessTokenType.PESU_PAY:
-        data["client_id"] = settings.TOUPESU_PESU_PAY_CLIENT_ID
-        data["client_secret"] = settings.TOUPESU_PESU_PAY_CLIENT_SECRET
-        url = settings.TOUPESU_PESU_PAY_URL + "/oauth/token"
-        
-    elif token_type == AccessTokenType.TOUPESU:
-        data["client_id"] = settings.TOUPESU_CLIENT_ID
-        data["client_secret"] = settings.TOUPESU_CLIENT_SECRET
-        url = settings.TOUPESU_URL + "/oauth/token"    
 
     headers = {
         "Content-Type": "application/json",
@@ -303,6 +304,14 @@ def get_access_token(token_type: str = AccessTokenType.WHATSAPP) -> str | None:
     return None
 
 
+push_service = FCMNotification(
+        service_account_file="src/laakam.json",
+        credentials=None,
+        project_id="laakam-487e5"
+    )
+
+env = Environment(loader=FileSystemLoader('src/templates'))
+
 class NotificationHelper :
     @staticmethod
     @shared_task  
@@ -317,100 +326,7 @@ class NotificationHelper :
         None
         """
         
-        #print(notify_data)
-        #data = {
-        #    "channel": "notify-" + notify_data["user_id"],   
-        #    "content" :  {
-        #        "type":"notification",
-        #        "data": notify_data
-        #    }
-        #}
-        
-        #NotificationHelper.send_ws_message(data=data)
-        
         NotificationHelper.send_push_notification(data=notify_data)
-
-
-    @staticmethod
-    def send_in_app_message(message_data : dict):
-        """
-        Send a message to a channel in the websocket, given the channel message data.
-
-        Args:
-        data (ChannelMessage): The message data.
-
-        Returns:
-        None
-        """
-        
-        #data = {
-        #    "channel":  message_data["channel_id"],
-        #    "content" :  {
-        #        "type":"message",
-        #        "data": message_data
-        #    }    
-        #}
-        
-        #NotificationHelper.send_ws_message(data=data)
-        
-        NotificationHelper.send_pusher_message(message_data=message_data)
-        
-        return True
-
-
-    @staticmethod
-    def send_ws_message(data : dict): 
-        
-        """
-        Send a message to a channel in the websocket, given the message data.
-
-        Args:
-        data (dict): The message data.
-
-        Returns:
-        None
-        """
-        headers = {
-                "Content-Type": "application/json",
-                'Accept': 'application/json'
-            }
-        url = f"http://{settings.WEBSOCKET_HOST}/broadcast"
-        if settings.WEBSOCKET_TOKEN != "" :
-            url = url + "?key=" + settings.WEBSOCKET_TOKEN
-            
-        
-        try :    
-
-            with httpx.Client() as client:
-                response =  client.post(url, json= data, headers=headers)  
-                
-                if response.status_code == 200 :
-                    response_json = response.json()
-                    print(response_json)
-                elif response.status_code == 401 :
-                    print("Unauthorized")
-                    
-                else :
-                    print(response.status_code)
-                    print(response.text) 
-
-        except Exception as e:
-            print(e)
-
-    @staticmethod
-    def send_pusher_message(data : dict): 
-        
-        """
-            Send a message to a channel through Pusher, given the message data.
-
-            Args:
-            data (dict): The message data.
-
-            Returns:
-            None
-        """
-        
-        pusher_client.trigger(channels=data["channel_id"], event_name='new-message', data=data)
 
 
     @staticmethod
@@ -445,7 +361,6 @@ class NotificationHelper :
                 data_payload=notify_data["action"]
             )
         
-
 
 
     @staticmethod   

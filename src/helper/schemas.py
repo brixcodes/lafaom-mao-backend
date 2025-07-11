@@ -81,6 +81,15 @@ class LanguageType(str, Enum):
     FRENCH = "fr"
     ENGLISH = "en"    
 
+class MESSAGE_CHANNEL(str, Enum):
+
+    PUSHER = "pusher"
+    CUSTOM_SERVICE = "custom_service"
+
+class EMAIL_CHANNEL(str, Enum):
+
+    SMTP = "smtp"
+    MAILGUN = "mailgun"
 
 class ErrorMessage(Enum):
     def __init__(self, value, description):

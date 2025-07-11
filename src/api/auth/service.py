@@ -9,6 +9,7 @@ from sqlmodel import select, delete
 from datetime import timedelta,datetime,timezone
 from passlib.context import CryptContext
 from src.api.auth.utils import get_password_hash
+from src.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -80,14 +81,14 @@ class AuthService:
     
     async def save_change_email_code(self,user_id :str ,  account : str, code : str   ):
         
-        code = ChangeEmailCode(account=account,code=code,user_id=user_id,end_time=datetime.now(timezone.utc) + timedelta(minutes=30))
+        code = ChangeEmailCode(account=account,code=code,user_id=user_id,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
         await self.session.merge(code)
         await self.session.commit()
         return code
     
     async def save_forgotten_password_code(self,user_id :str , account : str, code : str  ):
         
-        code = ForgottenPAsswordCode(user_id=user_id,account=account,code=code,end_time=datetime.now(timezone.utc) + timedelta(minutes=30))
+        code = ForgottenPAsswordCode(user_id=user_id,account=account,code=code,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
         await self.session.merge(code)
         await self.session.commit()
         return code

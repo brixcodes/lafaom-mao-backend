@@ -135,7 +135,7 @@ async def register(
     code = generate_random_code()  
     input = register_input.model_dump()
     input["code"]=   code 
-    input['end_time'] =  datetime.now(timezone.utc) + timedelta(minutes=30)
+    input['end_time'] =  datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES)
 
     temp  = await  token_service.save_temp_user(input)
     
@@ -143,7 +143,7 @@ async def register(
             email=temp.email,
             phone_number=temp.phone_number,
             code=code,
-            time = 30
+            time = settings.OTP_CODE_EXPIRE_MINUTES
             
         ).send_notification()
     
@@ -417,7 +417,7 @@ async def change_account(
         ChangeAccountNotification(
             email=input.account,
             code=code,
-            time = 30,
+            time = settings.OTP_CODE_EXPIRE_MINUTES,
             prefer_notification= NotificationChannel.EMAIL
         ).send_notification()
         

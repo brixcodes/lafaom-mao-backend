@@ -22,13 +22,20 @@ class Settings(BaseSettings):
     
     PROJECT_NAME: str = "La'akam"
     ENV: Literal["development", "staging", "production"] = "development"
+    
     DATABASE_URL: str = "postgresql://user:paÒssword@127.0.0.1:5432/test"
+    
     SECRET_KEY: str = secrets.token_urlsafe(32) 
     ALGORITHM: str = "HS256"
+    
     ACCESS_TOKEN_EXPIRE_MINUTES : int = 3600
     REFRESH_TOKEN_EXPIRE_MINUTES : int = 3600
+    OTP_CODE_EXPIRE_MINUTES : int = 30
     
+    ## Sentry Debugging url 
     SENTRY_DSN: HttpUrl | None = None
+    
+    ## Allow Cors origins
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)
     ] = []
@@ -38,73 +45,93 @@ class Settings(BaseSettings):
     def all_cors_origins(self) -> list[str]:
         return [str(origin).rstrip("/") for origin in self.BACKEND_CORS_ORIGINS] 
     
-    SMTP_TLS: bool = True
-    SMTP_SSL: bool = False
-    SMTP_PORT: int = 587
-    SMTP_HOST: str | None = None
-    SMTP_USER: str | None = None
-    SMTP_PASSWORD: str | None = None
-
+    ## Notification System
+    EMAIL_CHANNEL : Literal["smtp","mailgun"] = "smtp"
+    
+    
+    ## Email Parameters
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: str | None = None
     
-    MAILGUN_DOMAIN : str =""
-    MAILGUN_SECRET : str =""
-    MAILGUN_ENDPOINT : str ="api.eu.mailgun.net"
-
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:
         if not self.EMAILS_FROM_NAME:
             self.EMAILS_FROM_NAME = self.PROJECT_NAME
         return self
-
-    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
     
-    LINKEDIN_CLIENT_ID : str = ""
-    LINKEDIN_CLIENT_SECRET : str = ""
-    LINKEDIN_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/linkedin/callback"
-
-    GITHUB_CLIENT_ID : str = ""
-    GITHUB_CLIENT_SECRET : str = ""
-    GITHUB_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/github/callback"
+    ## Credential to connect to the SMTP Server
+    SMTP_ENCRYPTION: Literal["TLS", "SSL"] = "SSL"
+    SMTP_PORT: int = 587
+    SMTP_HOST: str | None = None
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
     
 
-    GOOGLE_CLIENT_ID : str = ""
-    GOOGLE_CLIENT_SECRET : str = ""
-    GOOGLE_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/google/callback"
+    ## Credential to connect to the Mailgun Server
+    MAILGUN_DOMAIN : str =""
+    MAILGUN_SECRET : str =""
+    MAILGUN_ENDPOINT : str ="api.eu.mailgun.net"
+
+
     
-    FACEBOOK_CLIENT_ID : str = ""
-    FACEBOOK_CLIENT_SECRET : str = ""
-    FACEBOOK_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/facebook/callback"
-    
-    POSTGRES_USER : str = ""
-    POSTGRES_PASSWORD : str =""
-    POSTGRES_DB : str = ""
-    
-    WEBSOCKET_HOST : str = "localhost:3000"
-    WEBSOCKET_TOKEN : str = ""
+    ## Credential to connect to Firebase Cloud Messaging for push notification
+    FCM_SERVER_KEY:str = ""
     
     
+    ## Credential to connect to Toupesu Whatsapp API
     TOUPESU_WHATSAPP_CLIENT_ID : str = ""
     TOUPESU_WHATSAPP_CLIENT_SECRET : str = ""
     TOUPESU_WHATSAPP_URL : str = ""
     
-    PUSHER_APP_ID : str = ""
-    PUSHER_KEY : str = ""
-    PUSHER_SECRET : str = ""
-    PUSHER_CLUSTER : str = ""
     
-    FCM_SERVER_KEY : str = ""
+    #Prefer storage location
+    STORAGE_LOCATION: Literal["local","S3"] = "local"  #local,S3
     
-    CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
-    CELERY_RESULT_BACKEND: str =  "redis://127.0.0.1:6379/0"
-
     
+    #Max file upload size
+    MAX_FILE_SIZE: int = 4343455
+    
+    
+    ## Credential to connect to AWS S3 Bucket
     AWS_ACCESS_KEY_ID : str = ""
     AWS_SECRET_ACCESS_KEY : str = ""
     AWS_REGION : str = "us-east-1"
     AWS_BUCKET_NAME : str = "your-bucket-name"
+    
+    ## The Redis Cache turn around time
+    CACHE_TTL:int   = 3600
+    
+    ## Redis cache url
+    REDIS_CACHE_URL:str = "redis://127.0.0.1:6379/0"
+    
+    ## Celery Broker and backend result url 
+    CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
+    CELERY_RESULT_BACKEND: str =  "redis://127.0.0.1:6379/0"
 
+
+
+    ## LinkedIn in oauth login credentials
+    LINKEDIN_CLIENT_ID : str = ""
+    LINKEDIN_CLIENT_SECRET : str = ""
+    LINKEDIN_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/linkedin/callback"
+    
+    
+    ## Github in oauth login credentials
+    GITHUB_CLIENT_ID : str = ""
+    GITHUB_CLIENT_SECRET : str = ""
+    GITHUB_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/github/callback"
+    
+    
+    ## Google in oauth login credentials
+    GOOGLE_CLIENT_ID : str = ""
+    GOOGLE_CLIENT_SECRET : str = ""
+    GOOGLE_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/google/callback"
+    
+    
+    ## Facebook in oauth login credentials
+    FACEBOOK_CLIENT_ID : str = ""
+    FACEBOOK_CLIENT_SECRET : str = ""
+    FACEBOOK_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/facebook/callback"
 
     CELERY_BEAT_SCHEDULE: dict = {
         # "task-schedule-work": {
@@ -136,9 +163,7 @@ class Settings(BaseSettings):
 
     CELERY_TASK_ROUTES: ClassVar[tuple] = (route_task,)
     
-    
-    ANT_MEDIA_URL : str = "http://127.0.0.1:5080/"
-    ANT_MEDIA_TOKEN : str = ""
+
 
     model_config = ConfigDict(
         env_file = ".env",
