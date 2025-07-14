@@ -596,18 +596,8 @@ async def update_profile_image(
     current_user: Annotated[User, Depends(get_current_active_user)],image: Annotated[UploadFile, File()], user_service : Annotated[UserService , Depends()]
 ):
     name = f"{current_user.first_name}_{current_user.last_name}_profile"
-    try :
-        document , _ , _ = await upload_file(file=image,location="/profile", name = name)
-        delete_file(current_user.picture)
-    
-    except Exception as e :
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=BaseOutFail(
-                    message=ErrorMessage.UNKNOWN_ERROR.description,
-                    error_code= ErrorMessage.UNKNOWN_ERROR.value
-                ).model_dump()
-        )
+    document , _ , _ = await upload_file(file=image,location="/profile", name = name)
+    delete_file(current_user.picture)
 
 
     user = await user_service.update_profile_image( user_id= current_user.id,picture= document   )
