@@ -60,3 +60,4 @@ pyfcm==2.0.8
 boto3==1.28.33
 aioredis==2.0.1
 itsdangerous
+certifi
