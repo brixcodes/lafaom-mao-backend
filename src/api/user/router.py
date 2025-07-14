@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
 
 from fastapi.responses import JSONResponse
-
+from src.redis_client import redis
 
 from src.api.auth.utils import  get_current_active_user
 from src.api.user.dependencies import get_user
@@ -75,6 +75,26 @@ async def setup_users(user_service: UserService = Depends()):
     await user_service.permission_set_up()
     
     return  {"data" : "Users setup successfully" }
+
+
+@router.get('/test-get-data-to-redis',tags=["Test"])
+async def get_data_redis(test_number : int):
+    cached = await redis.get(f"test:{test_number}")
+    if cached:
+        return  {"data" : cached }
+  
+    return  {"message" : "no data" }
+    
+@router.get('/test-get-data-to-redis',tags=["Test"])
+async def add_data_redis(test_number : int):
+    await redis.set(
+                        f"test:{test_number}", f"test:{test_number}", ex=60
+                    ) 
+    cached = await redis.get(f"test:{test_number}")
+    if cached:
+        return  {"data" : cached }
+  
+    return  {"message" : "npo data found after add" }
 
 # @router.delete("/{user_id}")
 # async def delete_user(
