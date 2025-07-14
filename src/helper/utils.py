@@ -33,6 +33,7 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r'[^\w\-_\.]', '_', name)
 
 
+
 async def upload_file_to_s3(file: UploadFile, location: str = "", name: str = "", public: bool = True):
     try:
         if file.size > settings.MAX_FILE_SIZE:
@@ -109,28 +110,32 @@ def get_public_file_url(key: str):
 
 def generate_presigned_url(key: str, expires_in: int = 3600):
     try:
-        s3 =s3 = get_s3_client();
-        url = s3.generate_presigned_url(
+        s3 = get_s3_client()
+        return s3.generate_presigned_url(
             "get_object",
             {"Bucket": settings.AWS_BUCKET_NAME, "Key": key},
             ExpiresIn=expires_in,
         )
-        return url
+        
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            return None 
+        raise RuntimeError(f"Could not generate presigned URL: {str(e)}")
     except Exception as e:
         raise RuntimeError(f"Could not generate presigned URL: {str(e)}")
 
 async def upload_file(file: UploadFile, location: str = "", name: str = ""):
     if settings.STORAGE_LOCATION == "local":
-        return upload_file_local(file, location, name)
+        return await upload_file_local(file, location, name)
     else:
-        upload_file_to_s3(file, location, name, public=True)
+        await upload_file_to_s3(file, location, name, public=True)
 
 
-def upload_private_file(file: UploadFile, location: str = "", name: str = ""):
+async def upload_private_file(file: UploadFile, location: str = "", name: str = ""):
     if settings.STORAGE_LOCATION == "local":
-        return upload_file_local(file, location, name)
+        return await upload_file_local(file, location, name)
     else:
-        upload_file_to_s3(file, location, name, public=False)
+        return await upload_file_to_s3(file, location, name, public=False)
 
 def delete_file(file_path: str):
     if settings.STORAGE_LOCATION == "local":
@@ -186,7 +191,7 @@ async def upload_file_local(file: UploadFile, location: str = "", name: str = ""
         return None, None, None
 
 
-def upload_private_file_local(file: UploadFile, location: str = "", name: str = ""):
+async def upload_private_file_local(file: UploadFile, location: str = "", name: str = ""):
     """
     This function is used to upload a file to the server. The file is saved
     in the src/static directory. If a location is provided, the file is saved
@@ -248,66 +253,6 @@ def delete_file_local(file_path: str):
     except Exception as e:
         print(e)
         return {"message": "Exception has occur", "success": False}
-
-
-def get_access_token(token_type: str = AccessTokenType.WHATSAPP) -> str | None:
-    """
-    Get an access token from the token table or if the token is not found, fetch one from the API.
-
-    Args:
-        token_type (str): The type of token to get, either whatsapp or pesu_pay.
-            Defaults to AccessTokenType.WHATSAPP.
-
-    Returns:
-        str: The access token, or None if it could not be fetched.
-    """
-    session_gen = get_session() 
-    session = next(session_gen)
-    
-    statement = select(TokenData).where(TokenData.token_type == token_type).where(TokenData.expires_at >= datetime.now(timezone.utc)).order_by(TokenData.id.desc())
-    token =  session.exec(statement).first()
-    if token is not None:
-        return token.token_string  
-
-    data = {
-        "grant_type": "client_credentials",
-        "scope": "*",
-    }
-    url = ""
-    if token_type == AccessTokenType.WHATSAPP:
-        data["client_id"] = settings.TOUPESU_WHATSAPP_CLIENT_ID
-        data["client_secret"] = settings.TOUPESU_WHATSAPP_CLIENT_SECRET
-        url = settings.TOUPESU_WHATSAPP_URL + "/oauth/token"
-        
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-    with httpx.Client(verify=False) as client:
-        response =   client.post(url, json=data, headers=headers)
-        
-    
-        if response.status_code == 200:
-            try :
-                response_json =   response.json()
-                if "access_token" in response_json:
-                    token = TokenData(
-                        token_string=response_json["access_token"],
-                        expires_at=datetime.now(timezone.utc) + timedelta(seconds=response_json["expires_in"]),
-                        token_type=token_type,
-                    )
-                    
-                    session.add(token)
-                    session.commit()
-                    return token.token_string    
-            except Exception as e:  
-                print(e)
-                return None
-
-
-    return None
 
 
 push_service = FCMNotification(
