@@ -128,7 +128,7 @@ async def upload_file(file: UploadFile, location: str = "", name: str = ""):
     if settings.STORAGE_LOCATION == "local":
         return await upload_file_local(file, location, name)
     else:
-        await upload_file_to_s3(file, location, name, public=True)
+        return await upload_file_to_s3(file, location, name, public=True)
 
 
 async def upload_private_file(file: UploadFile, location: str = "", name: str = ""):
