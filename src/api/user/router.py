@@ -85,7 +85,7 @@ async def get_data_redis(test_number : int):
   
     return  {"message" : "no data" }
     
-@router.get('/test-get-data-to-redis',tags=["Test"])
+@router.get('/test-add-data-to-redis',tags=["Test"])
 async def add_data_redis(test_number : int):
     await redis.set(
                         f"test:{test_number}", f"test:{test_number}", ex=60
