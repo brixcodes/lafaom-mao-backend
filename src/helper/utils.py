@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import UploadFile
 import os
 from datetime import datetime, timedelta, timezone
@@ -137,7 +138,9 @@ async def upload_private_file(file: UploadFile, location: str = "", name: str = 
     else:
         return await upload_file_to_s3(file, location, name, public=False)
 
-def delete_file(file_path: str):
+def delete_file(file_path: Optional[str] = None):
+    if file_path is None:
+        return
     if settings.STORAGE_LOCATION == "local":
         return delete_file_local(file_path)
     else:
