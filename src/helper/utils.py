@@ -32,7 +32,8 @@ def get_s3_client():
 def sanitize_filename(name: str) -> str:
     return re.sub(r'[^\w\-_\.]', '_', name)
 
-async def upload_file_to_s3(file: UploadFile, location: str = "", name: str = "", public: bool = False):
+
+async def upload_file_to_s3(file: UploadFile, location: str = "", name: str = "", public: bool = True):
     try:
         if file.size > settings.MAX_FILE_SIZE:
             raise ValueError(f"File size exceeds limit of {settings.MAX_FILE_SIZE} bytes")
@@ -42,14 +43,19 @@ async def upload_file_to_s3(file: UploadFile, location: str = "", name: str = ""
         name_split = os.path.splitext(file.filename)
 
         if not name:
-            name = sanitize_filename(name_split[0])
-            back_name = name
+            back_name = sanitize_filename(name_split[0]) 
+            name = back_name + "_s3" + name_split[1]
         else:
             back_name = sanitize_filename(name)
-            name = f"{back_name}{name_split[1]}"
+            name = f"{back_name}_s3{name_split[1]}"
 
-        full_path = f"{path}/{date_time_now}_{name}_s3" if path else f"{date_time_now}_{name}_s3"
-        extra_args = {}  # Removed ACL for modern S3 buckets
+        full_path = f"{path}/{date_time_now}_{name}" if path else f"{date_time_now}_{name}"
+        extra_args = { "ContentType": file.content_type }
+        if public:
+            full_path = f"public/{full_path}"
+        else : 
+            full_path = f"private/{full_path}"
+            
 
         s3 = get_s3_client()
         await file.seek(0)  # Ensure file pointer is at start
