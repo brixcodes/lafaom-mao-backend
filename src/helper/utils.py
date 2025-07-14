@@ -139,7 +139,7 @@ async def upload_private_file(file: UploadFile, location: str = "", name: str = 
         return await upload_file_to_s3(file, location, name, public=False)
 
 def delete_file(file_path: Optional[str] = None):
-    if file_path is None:
+    if file_path is None or file_path == "":
         return
     if settings.STORAGE_LOCATION == "local":
         return delete_file_local(file_path)
