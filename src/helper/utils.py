@@ -16,7 +16,7 @@ from celery import shared_task
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError 
 from fastapi import UploadFile
-
+import re
 
 
 
