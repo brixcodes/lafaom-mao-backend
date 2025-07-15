@@ -4,20 +4,24 @@ from redis.asyncio.connection import SSLConnection
 from src.config import settings
 
 
-def get_redis():
-    
-    
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+_redis = None
 
-    pool = ConnectionPool.from_url(
-        settings.REDIS_CACHE_URL,
-        connection_class=SSLConnection,
-        ssl=True,
-        ssl_context=ssl_context,
-    )
-    return Redis(connection_pool=pool)
+def get_redis():
+    global _redis
+    if _redis is None:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE  # ⚠️ pour dev uniquement
+
+        _redis = Redis(
+            connection_pool=ConnectionPool.from_url(
+                url=settings.REDIS_CACHE_URL,
+                connection_class=SSLConnection,
+                ssl_context=ssl_context,
+            )
+        )
+    return _redis
+
     
     
 
