@@ -16,9 +16,7 @@ def get_redis():
         ssl_context.verify_mode = ssl.CERT_NONE  # ⚠️ pour dev uniquement
 
         _redis = aioredis.from_url(
-            settings.REDIS_CACHE_URL,
-            connection_class=SSLConnection,
-            ssl_context=ssl_context,
+            settings.REDIS_CACHE_URLclear
         )
     return _redis
 
