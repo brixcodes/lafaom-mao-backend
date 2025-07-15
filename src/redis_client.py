@@ -4,13 +4,10 @@ from src.config import settings
 
 
 def get_redis():
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_REQUIRED 
+
     
     return Redis.from_url(
-        settings.REDIS_CACHE_URL,
-        ssl=True
+        settings.REDIS_CACHE_URL
     )
 
 async def set_to_redis(key, value, ex=None):
