@@ -13,8 +13,6 @@ def get_redis():
     
     return Redis.from_url(
         settings.REDIS_CACHE_URL,
-        ssl=True,
-        ssl_cert_reqs=ssl.CERT_NONE,
         ssl_context=ssl_context,
     )
 
