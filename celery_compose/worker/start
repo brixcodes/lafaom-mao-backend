@@ -3,4 +3,4 @@
 set -o errexit
 set -o nounset
 
-exec celery -A src.main.celery worker --loglevel=info
+exec celery -A src.main.celery worker -Q laakam_iam_default,laakam_iam_high_priority --loglevel=info

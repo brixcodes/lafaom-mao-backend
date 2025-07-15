@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
 
 from fastapi.responses import JSONResponse
-from src.redis_client import redis
+from src.redis_client import get_from_redis, redis, set_to_redis
 
 from src.api.auth.utils import  get_current_active_user
 from src.api.user.dependencies import get_user
@@ -79,7 +79,7 @@ async def setup_users(user_service: UserService = Depends()):
 
 @router.get('/test-get-data-to-redis',tags=["Test"])
 async def get_data_redis(test_number : int):
-    cached = await redis.get(f"test:{test_number}")
+    cached = await set_to_redis(f"test:{test_number}")
     if cached:
         return  {"data" : cached }
   
@@ -87,10 +87,10 @@ async def get_data_redis(test_number : int):
     
 @router.get('/test-add-data-to-redis',tags=["Test"])
 async def add_data_redis(test_number : int):
-    await redis.set(
+    await set_to_redis(
                         f"test:{test_number}", f"test:{test_number}", ex=60
                     ) 
-    cached = await redis.get(f"test:{test_number}")
+    cached = await get_from_redis(f"test:{test_number}")
     if cached:
         return  {"data" : cached }
   

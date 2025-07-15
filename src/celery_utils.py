@@ -14,11 +14,22 @@ def create_celery():
     
     celery_app.conf.update(
         namespace="CELERY",
-        result_backend=  settings.CELERY_RESULT_BACKEND ,  # replace CELERY_RESULT_BACKEND
-        broker_connection_retry_on_startup=True,  # replace broker_connection_retry
-        broker_url= settings.CELERY_BROKER_URL,
+        broker_url=settings.CELERY_BROKER_URL,  # rediss://...
+        result_backend=settings.CELERY_RESULT_BACKEND,  # rediss://...
         broker_use_ssl=ssl_options,
-        redis_backend_use_ssl=ssl_options,
+        result_backend_transport_options=ssl_options,
+        broker_connection_retry_on_startup=True,
+        task_default_retry_delay=5,
+        task_acks_late=True,
+        worker_prefetch_multiplier=1,
+        task_reject_on_worker_lost=True,
+        task_default_queue="laakam_iam_default",
+        task_queues={
+            "laakam_iam_default": {
+                "exchange": "laakam_iam",
+                "routing_key": "laakam_iam.default",
+            },
+        }
         # Other configurations
     )
 
@@ -31,17 +42,18 @@ def get_task_info(task_id):
     return task info according to the task_id
     """
     task = AsyncResult(task_id)
-    state = task.state
+    
 
-    if state == "FAILURE":
-        error = str(task.result)
+    if task.state == "FAILURE":
+        
         response = {
             "state": task.state,
-            "error": error,
+            "error": str(task.result)
         }
     else:
         response = {
             "state": task.state,
+            "result": task.result,
         }
     return response
 

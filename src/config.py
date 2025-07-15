@@ -16,7 +16,7 @@ def route_task(name, args, kwargs, options, task=None, **kw):
     if ":" in name:
         queue, _ = name.split(":")
         return {"queue": queue}
-    return {"queue": "default"}
+    return {"queue": "laakam_iam_default"}
 
 class Settings(BaseSettings):
     
@@ -149,16 +149,18 @@ class Settings(BaseSettings):
         # },
         
     }
+    
+    REDIS_NAMESPACE = "laakam_iam"
 
-    CELERY_TASK_DEFAULT_QUEUE: str = "default"
+    CELERY_TASK_DEFAULT_QUEUE: str = "laakam_iam_default"
 
     # Force all queues to be explicitly listed in `CELERY_TASK_QUEUES` to help prevent typos
     CELERY_TASK_CREATE_MISSING_QUEUES: bool = False
 
     CELERY_TASK_QUEUES: list[Queue]  = [
-        Queue("default"),
-        Queue("high_priority"),
-        Queue("low_priority"),
+        Queue("laakam_iam_default"),
+        Queue("laakam_iam_high_priority"),
+        Queue("laakam_iam_low_priority"),
     ]
 
     CELERY_TASK_ROUTES: ClassVar[tuple] = (route_task,)
