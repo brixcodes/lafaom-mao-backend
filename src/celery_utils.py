@@ -6,7 +6,7 @@ from celery.utils.time import get_exponential_backoff_interval
 from src.config import settings
 
 ssl_options = {
-    "ssl_cert_reqs": ssl.CERT_NONE,  # ⚠️ Insecure, use CERT_REQUIRED in production
+    "ssl_cert_reqs": ssl.CERT_REQUIRED,  # ⚠️ Insecure, use CERT_REQUIRED in production
 }
 
 def create_celery():
