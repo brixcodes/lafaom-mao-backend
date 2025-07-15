@@ -10,7 +10,7 @@ def get_redis():
     
     return Redis.from_url(
         settings.REDIS_CACHE_URL,
-        ssl_context=ssl_context
+        ssl=True
     )
 
 async def set_to_redis(key, value, ex=None):
