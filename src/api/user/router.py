@@ -82,7 +82,7 @@ async def get_data_redis(test_number : int):
     cached = await set_to_redis(f"test:{test_number}")
     if cached:
         return  {"data" : cached }
-  
+
     return  {"message" : "no data" }
     
 @router.get('/test-add-data-to-redis',tags=["Test"])
@@ -93,7 +93,7 @@ async def add_data_redis(test_number : int):
     cached = await get_from_redis(f"test:{test_number}")
     if cached:
         return  {"data" : cached }
-  
+
     return  {"message" : "npo data found after add" }
 
 # @router.delete("/{user_id}")

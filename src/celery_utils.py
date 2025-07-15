@@ -23,6 +23,9 @@ def create_celery():
         task_acks_late=True,
         worker_prefetch_multiplier=1,
         task_reject_on_worker_lost=True,
+        result_backend_transport_options={
+                "global_keyprefix": "laakam_iam:"  
+            },
         task_default_queue="laakam_iam_default",
         task_queues={
             "laakam_iam_default": {
