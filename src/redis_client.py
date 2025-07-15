@@ -11,10 +11,11 @@ ssl_context.verify_mode = ssl.CERT_NONE
 def get_redis():
     return Redis.from_url(settings.REDIS_CACHE_URL,ssl=ssl_context)
 
-async def set_to_redis(key, value):
+async def set_to_redis(key, value, ex=None):
     
     redis = get_redis()
-    return await redis.set(f"{settings.REDIS_NAMESPACE}:{key}", value)
+    
+    return await redis.set(f"{settings.REDIS_NAMESPACE}:{key}", value, ex=ex)
 
 
 async def get_from_redis(key):
