@@ -79,7 +79,7 @@ async def setup_users(user_service: UserService = Depends()):
 
 @router.get('/test-get-data-to-redis',tags=["Test"])
 async def get_data_redis(test_number : int):
-    cached = await set_to_redis(f"test:{test_number}")
+    cached = await get_from_redis(f"test:{test_number}")
     if cached:
         return  {"data" : cached }
 
