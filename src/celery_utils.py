@@ -1,10 +1,13 @@
 import functools
-
+import ssl
 from celery import current_app as current_celery_app, shared_task
 from celery.result import AsyncResult
 from celery.utils.time import get_exponential_backoff_interval
 from src.config import settings
 
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 def create_celery():
     celery_app = current_celery_app
@@ -14,6 +17,14 @@ def create_celery():
         result_backend=  settings.CELERY_RESULT_BACKEND ,  # replace CELERY_RESULT_BACKEND
         broker_connection_retry_on_startup=True,  # replace broker_connection_retry
         broker_url= settings.CELERY_BROKER_URL,
+        broker_use_ssl={
+            "ssl_cert_reqs": ssl.CERT_NONE,
+            "ssl_context": ssl_context,
+        },
+        redis_backend_use_ssl={
+            "ssl_cert_reqs": ssl.CERT_NONE,
+            "ssl_context": ssl_context,
+        },
         # Other configurations
     )
 
