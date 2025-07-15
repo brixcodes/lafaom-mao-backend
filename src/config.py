@@ -150,7 +150,7 @@ class Settings(BaseSettings):
         
     }
     
-    REDIS_NAMESPACE = "laakam_iam"
+    REDIS_NAMESPACE:str = "laakam_iam"
 
     CELERY_TASK_DEFAULT_QUEUE: str = "laakam_iam_default"
 
