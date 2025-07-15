@@ -23,6 +23,9 @@ def create_celery():
         task_acks_late=True,
         worker_prefetch_multiplier=1,
         task_reject_on_worker_lost=True,
+        broker_transport_options={
+                "global_keyprefix": "laakam_iam:" 
+            },
         result_backend_transport_options={
                 "global_keyprefix": "laakam_iam:" 
             },
