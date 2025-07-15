@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
 
 from fastapi.responses import JSONResponse
-from src.redis_client import get_from_redis, redis, set_to_redis
+from src.redis_client import get_from_redis, set_to_redis
 
 from src.api.auth.utils import  get_current_active_user
 from src.api.user.dependencies import get_user
