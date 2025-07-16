@@ -5,9 +5,9 @@ from fastapi.responses import JSONResponse
 from src.helper.utils import NotificationHelper
 from src.redis_client import get_from_redis, set_to_redis
 
-from src.api.auth.utils import  get_current_active_user
+from src.api.auth.utils import  check_permissions, get_current_active_user
 from src.api.user.dependencies import get_user
-from src.api.user.models import User
+from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
 from src.api.user.schemas import ( UserListInput, UserListOutSuccess, UserOutSuccess,  UserUpdateInput, UsersOutSuccess)
@@ -32,13 +32,14 @@ async def read_user_list( input: UserListInput , user_service: UserService = Dep
 
 
 @router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
-async def read_user(user : Annotated[User, Depends(get_user)]):
+async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
 
     return  {"data" : user, "message":"Users fetch successfully" }
 
 
 @router.put("/users/{user_id}")
 async def update_user(
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
     user_id: str,
     user_update_input: UserUpdateInput,
     user : Annotated[User, Depends(get_user)],
