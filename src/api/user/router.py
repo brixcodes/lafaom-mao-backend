@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
 
 from fastapi.responses import JSONResponse
+from src.helper.utils import NotificationHelper
 from src.redis_client import get_from_redis, set_to_redis
 
 from src.api.auth.utils import  get_current_active_user
@@ -95,6 +96,23 @@ async def add_data_redis(test_number : int):
         return  {"data" : cached }
 
     return  {"message" : "npo data found after add" }
+
+@router.get('/test-send-email',tags=["Test"])
+async def test_email(email : str):
+    
+    data = {
+            "to_email" : email,
+            "subject":"Email Validation",
+            "template_name":"verify_email.html" ,
+            "lang":"en",
+            "context":{
+                    "code":"AZERTY",
+                    "time": 30
+                } 
+        } 
+    NotificationHelper.send_smtp_email(data=data)
+
+    return  {"message" : "email send" }
 
 # @router.delete("/{user_id}")
 # async def delete_user(

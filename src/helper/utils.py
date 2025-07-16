@@ -369,6 +369,7 @@ class NotificationHelper :
         message["From"] = settings.EMAILS_FROM_EMAIL
         message["To"] = data["to_email"]
         message["Subject"] =  data["subject"]
+        data["context"]["app_name"] = settings.EMAILS_FROM_NAME
 
         if data["template_name"] :
             template = env.get_template(data["lang"] + "/" + data["template_name"])
@@ -377,13 +378,23 @@ class NotificationHelper :
         message.attach(MIMEText(body, "html" if data["template_name"] else "plain"))     
             
         try:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                server.starttls()
+            if settings.SMTP_ENCRYPTION == "TLS":
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                    server.starttls()
+                    
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(message)
+                    
+                    print('email send ' + data["to_email"] )
+            else:
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                    
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(message)
+                    
+                    print('email send ' + data["to_email"] )
                 
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.send_message(message)
-                
-                print('email send ' + data["to_email"] )
+    
                 
         except smtplib.SMTPAuthenticationError as e:
             print(f"Authentication error: {e}")

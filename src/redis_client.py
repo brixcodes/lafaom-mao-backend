@@ -1,8 +1,4 @@
-import ssl
-
 import aioredis
-from redis.asyncio import Redis, ConnectionPool
-from redis.asyncio.connection import SSLConnection
 from src.config import settings
 
 
@@ -11,10 +7,6 @@ _redis = None
 def get_redis():
     global _redis
     if _redis is None:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE  # ⚠️ pour dev uniquement
-
         _redis = aioredis.from_url(
             settings.REDIS_CACHE_URL
         )
