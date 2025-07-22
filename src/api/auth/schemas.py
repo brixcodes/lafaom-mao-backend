@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 from pydantic import BaseModel,field_validator,EmailStr
 import phonenumbers
 from  datetime import datetime
@@ -197,6 +197,8 @@ class Provider(str, Enum):
     LINKEDIN = "linkedin"
     FACEBOOK = "facebook"
 
-
+class SocialTokenInput(BaseModel) : 
+    token : str
+    platform : Literal["ios", "android", "web"] = "web"
 
 

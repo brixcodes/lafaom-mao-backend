@@ -2,11 +2,11 @@ from datetime import timedelta
 from typing import Annotated
 from fastapi import Depends , HTTPException, status, APIRouter,BackgroundTasks,UploadFile,File,Request,Response
 from src.api.user.models import DeviceType, User
-from src.api.auth.schemas import (CheckPermission, Token,LoginInput,RegisterInput, UpdateDeviceInput,ValidateAccountInput,
+from src.api.auth.schemas import (CheckPermission, SocialTokenInput, Token,LoginInput,RegisterInput, UpdateDeviceInput,ValidateAccountInput,
                                 ValidateForgottenPasswordCode,ValidateChangeEmailCode,UpdateAccountSettingInput,
                                 ChangeAttributeInput,RefreshTokenInput,UpdateUserInput,UserTokenOut,
                                 UpdatePasswordInput,Provider,ProviderURL,RegisterProviderInput,AuthCodeInput)
-from src.api.auth.utils import (get_current_active_user,verify_password,
+from src.api.auth.utils import (get_current_active_user, verify_facebook_token, verify_firebase_token,verify_password,
                                 generate_random_code,create_access_token)
 from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswordNotification,AccountVerifyNotification,NotificationChannel)
 from src.config import settings
@@ -992,5 +992,67 @@ async def code_auth(response: Response,request: Request,
         }
 
 
+@router.post("/{provider}/mobile-login",response_model=UserTokenOut)
+async def mobile_prover_login(input: SocialTokenInput, token_service : Annotated[AuthService, Depends()],user_service : Annotated[UserService , Depends()],provider : Provider = Provider.GOOGLE,
+) :
+    
+    if provider == Provider.GOOGLE :
 
+        user_data = await verify_firebase_token(input.token)
+        
+    elif provider == Provider.FACEBOOK :
+        
+        user_data = await verify_facebook_token(input.token)
+        
+    else :
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.PROVIDER_NOT_SUPPORTED.describe,
+                    error_code= ErrorMessage.PROVIDER_NOT_SUPPORTED.value
+                ).model_dump()
+            )
+    
+    if user_data == None :
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.INVALID_TOKEN.describe,
+                    error_code= ErrorMessage.INVALID_TOKEN.value
+                ).model_dump()
+            )
+    
+    user_info = user_data
+    
+    if user_data == None :
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.INVALID_TOKEN.describe,
+                    error_code= ErrorMessage.INVALID_TOKEN.value
+                ).model_dump()
+            )
+    
+    user_input = RegisterProviderInput(
+                    first_name=user_info["first_name"],
+                    last_name=user_info["last_name"],
+                    email= user_info["email"],
+                    phone_number= None,
+                    lang="en",
+                    picture = user_info["picture"],
+                    country_code="CM"
+                )
 
+    user = await token_service.make_provider_register(user_provider_id=user_info["provider_user_id"],provider=Provider.GOOGLE,user_input=user_input)
+    
+    
+    refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
+    
+    access_token =  create_access_token(data={"sub": user.id})
+
+    return {
+            "access_token" : Token(
+                token=access_token, token_type="bearer", expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,refresh_token= token,device_id=refresh_token.id
+            ),
+            "user" :user
+        }

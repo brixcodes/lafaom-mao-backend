@@ -108,7 +108,6 @@ def delete_file_from_s3(key: str) -> bool:
 def get_public_file_url(key: str):
     return f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
-
 def generate_presigned_url(key: str, expires_in: int = 3600):
     try:
         s3 = get_s3_client()

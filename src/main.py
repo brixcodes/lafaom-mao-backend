@@ -4,13 +4,19 @@ from fastapi.responses import JSONResponse
 from src.config import settings
 from src.api.user.router import router as user_router
 from src.api.auth.router import router as auth_router
-
+import firebase_admin
+from firebase_admin import credentials
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 import sentry_sdk
 from src.celery_utils import create_celery
 from src.helper.schemas import BaseOutFail, ErrorMessage
+# Initialize Firebase Admin SDK
+if firebase_admin._apps:
+    firebase_admin.delete_app(firebase_admin.get_app())
+cred = credentials.Certificate("src/laakam.json")
+firebase_admin.initialize_app(credential=cred)
 
 if settings.SENTRY_DSN and settings.ENV != "development":
     sentry_sdk.init(

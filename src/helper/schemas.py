@@ -138,6 +138,7 @@ class ErrorMessage(Enum):
 
     ACCESS_DENIED = ('access_denied',"Access denied")
     SERVER_ERROR = ('server_error',"Server error")
+    PROVIDER_NOT_SUPPORTED = ('provider_not_supported',"Provider not supported")     
 
     
     def __str__(self):

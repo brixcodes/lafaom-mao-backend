@@ -11,6 +11,10 @@ import string
 import jwt
 from datetime import datetime, timedelta, timezone
 from src.config import settings
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+import httpx
+from firebase_admin import auth as firebase_auth
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -124,3 +128,65 @@ def generate_random_code(length=5):
     characters = string.ascii_letters + string.digits  # a-z, A-Z, 0-9
 
     return ''.join(random.choice(characters) for _ in range(length)).upper()
+
+
+
+async def verify_google_token(token: str, platform: str = "web"):
+    
+    
+    try:
+        idinfo = id_token.verify_oauth2_token(id_token=token, request=google_requests.Request())
+        if idinfo["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise HTTPException(status_code=403, detail="Invalid token issuer")
+
+        # Ensure it was issued to one of your apps
+        #if idinfo["aud"] == settings.GOOGLE_CLIENT_ID and platform == "web":
+        #    raise HTTPException(status_code=403, detail="Invalid audience")
+    
+        return {
+                "provider_user_id": idinfo["sub"],
+                "email": idinfo["email"],
+                "first_name": idinfo.get("given_name", ""),
+                "last_name": idinfo.get("family_name", ""),
+                "picture": idinfo.get("picture")
+            }
+    except Exception as e:
+        print(e)
+        return None
+
+
+
+async def verify_facebook_token(token: str):
+    async with httpx.AsyncClient() as client:
+        # Get user info
+        user_info_url = f"https://graph.facebook.com/me?fields=id,first_name,last_name,email,picture&access_token={token}"
+        resp = await client.get(user_info_url)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        return {
+            "provider_user_id": data["id"],
+            "email": data.get("email"),
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"),
+            "picture": data.get("picture", {}).get("data", {}).get("url")
+        }
+
+
+
+async def verify_firebase_token(token: str):
+    
+    try:
+        decoded_token = firebase_auth.verify_id_token(token)
+        return {
+                "provider_user_id": decoded_token["uid"],
+                "email": decoded_token.get("email", ""),
+                "first_name": decoded_token.get("name", "").split(" ")[0] if decoded_token.get("name") else "",
+                "last_name": decoded_token.get("name", "").split(" ")[1] if decoded_token.get("name") and len(decoded_token["name"].split(" ")) > 1 else "",
+                "picture": decoded_token.get("picture")
+        }
+    
+    except Exception as e:
+        print(e)
+        
+        return None
