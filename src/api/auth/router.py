@@ -993,7 +993,7 @@ async def code_auth(response: Response,request: Request,
 
 
 @router.post("/{provider}/mobile-login",response_model=UserTokenOut)
-async def mobile_prover_login(input: SocialTokenInput, token_service : Annotated[AuthService, Depends()],user_service : Annotated[UserService , Depends()],provider : Provider = Provider.GOOGLE,
+async def mobile_prover_login(input: SocialTokenInput, token_service : Annotated[AuthService, Depends()],provider : Provider = Provider.GOOGLE,
 ) :
     
     if provider == Provider.GOOGLE :

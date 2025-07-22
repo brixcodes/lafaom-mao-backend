@@ -158,6 +158,27 @@ class AuthService:
         
         return code.code 
 
+    async def make_provider_register(self,provider : Provider , user_provider_id : str,user_input : RegisterProviderInput) : 
+        user_service = UserService(session =self.session)
+        
+        user_provider = await self.get_user_provider(provider=provider, user_provider_id=user_provider_id)
+    
+        if user_provider == None :
+            
+            user = await user_service.get_by_email(user_email= user_input.email)
+            
+            if user == None :
+                user_input.password = secrets.token_urlsafe(8)
+
+                user = await user_service.create(user_input)
+            
+            user_provider = await self.add_user_provider(user_id=user.id,user_provider_id=user_provider_id,provider=provider)
+        
+        user = await user_service.get_by_id(user_id=user_provider.user_id)
+        
+        return user 
+
+
     
     async def create_temp_auth_code(self,user_id: str,expires_delta = None) : 
         
