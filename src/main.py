@@ -97,7 +97,10 @@ origins = [
     "http://localhost",
     "http://localhost:4200",
     "http://127.0.0.1:4200",
-    "http://127.0.0.1:5500"
+    "http://127.0.0.1:5500",
+    "https://laakam.com",
+    "https://api.laakam.com",
+    "https://www.laakam.com",
     
 ]
 
