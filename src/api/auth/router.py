@@ -898,6 +898,8 @@ async def facebook_callback(request: Request, code: str, token_service: Annotate
                 )
 
         user_data = user_response.json()
+        
+        print("https://graph.facebook.com/me" ,user_data)
 
         # Step 3: Parse and normalize user info
         name_parts = user_data.get("name", "").split(" ", 1)
@@ -925,6 +927,8 @@ async def facebook_callback(request: Request, code: str, token_service: Annotate
         picture=picture,
         country_code="CM"
     )
+    
+    print(user_input)
 
     # Step 4: Process provider auth & generate code
     provider_user_id = user_data.get("id")
