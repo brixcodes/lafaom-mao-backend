@@ -899,7 +899,7 @@ async def facebook_callback(request: Request, code: str, token_service: Annotate
 
         user_data = user_response.json()
         
-        print("https://graph.facebook.com/me" ,user_data)
+        
 
         # Step 3: Parse and normalize user info
         name_parts = user_data.get("name", "").split(" ", 1)

@@ -96,6 +96,15 @@ class PermissionEnum(str, Enum):
     CAN_UPDATE_RADIO_PROGRAM = "can_update_radio_program"
     CAN_DELETE_RADIO_PROGRAM = "can_delete_radio_program"
     
+    CAN_VIEW_NEWSPAPER = "can_view_newspaper"
+    CAN_CREATE_NEWSPAPER = "can_create_newspaper"
+    CAN_UPDATE_NEWSPAPER = "can_update_newspaper"
+    CAN_DELETE_NEWSPAPER = "can_delete_newspaper"
+
+    CAN_VIEW_NEWSPAPER_ARTICLE = "can_view_newspaper_article"
+    CAN_CREATE_NEWSPAPER_ARTICLE = "can_create_newspaper_article"
+    CAN_UPDATE_NEWSPAPER_ARTICLE = "can_update_newspaper_article"
+    CAN_DELETE_NEWSPAPER_ARTICLE = "can_delete_newspaper_article"
 
 
 class NotificationChannel(str, Enum):

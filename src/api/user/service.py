@@ -36,6 +36,7 @@ class UserService:
         user = result.scalars().first()
         return user
 
+
     async def get_by_email(self, user_email: str):
         statement = select(User).where(User.email == user_email)
         result = await self.session.execute(statement)
