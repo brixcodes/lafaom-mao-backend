@@ -142,6 +142,7 @@ class User(CustomBaseUUIDModel,table=True):
     web_token : str | None = Field(nullable=True)
     last_login : datetime = Field(sa_type=TIMESTAMP(timezone=True), nullable=True)
     user_type :str = Field(default=UserTypeEnum.Student)
+    two_factor_enabled : bool = Field(default=False)
     
     
     professions_status : ProfessionStatus = Relationship()

@@ -88,7 +88,7 @@ class AuthService:
         
         return code
         
-    async def make_change_account_used(self, id : int  ):
+    async def make_change_email_used(self, id : int  ):
         
         statement = select(ChangeEmailCode).where(ChangeEmailCode.id == id)
         result = await self.session.execute(statement)
@@ -100,9 +100,10 @@ class AuthService:
     
     
 
-    def save_two_factor_code(self, code : str, user_id : str, email : str  ):
+    async def save_two_factor_code(self, code : str, user_id : str, email : str  ):
         statement = select(TwoFactorCode).where(TwoFactorCode.user_id == user_id).where(TwoFactorCode.active == True).order_by(TwoFactorCode.id.desc())
-        old_code = self.session.exec(statement).first()
+        old_code_result = await self.session.execute(statement)
+        old_code = old_code_result.scalar_one_or_none()
         if old_code != None :
             old_code.active = False
             self.session.add(old_code)
@@ -114,17 +115,17 @@ class AuthService:
         self.session.refresh(code)
         return code
     
-    def get_two_factor_code(self,  code : str, email : str  ):
+    async def get_two_factor_code(self,  code : str, email : str  ):
         
         statement = select(TwoFactorCode).where(TwoFactorCode.email == email).where(TwoFactorCode.code == code).order_by(TwoFactorCode.id.desc())
-        code = self.session.exec(statement).first()
-        
-        return code
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
     
-    def make_two_factor_code_used(self, id : int  ):
+    async def make_two_factor_code_used(self, id : int  ):
         
         statement = select(TwoFactorCode).where(TwoFactorCode.id == id)
-        code = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        code = result.scalar_one_or_none()
         code.active = False
         self.session.add(code)
         self.session.commit()

@@ -1,14 +1,13 @@
-from datetime import timedelta
 from typing import Annotated
-from fastapi import Depends , HTTPException, status, APIRouter,BackgroundTasks,UploadFile,File,Request,Response
+from fastapi import Depends , HTTPException, status, APIRouter,UploadFile,File,Request,Response
 from src.api.user.models import  User
-from src.api.auth.schemas import ( ChangeEmailInput, ClientACcessTokenInput, ForgottenPasswordInput, SocialTokenInput, Token,LoginInput, UpdateDeviceInput,
+from src.api.auth.schemas import ( ChangeEmailInput, ClientACcessTokenInput, ForgottenPasswordInput, Token,LoginInput, UpdateDeviceInput,
                                 RefreshTokenInput, UpdateUserProfile,UserTokenOut,UpdatePasswordInput,AuthCodeInput, ValidateChangeCodeInput, ValidateForgottenCodeInput)
 
 from src.api.auth.utils import (get_all_keys, get_current_active_user, make_access_token,verify_password,
                                 generate_random_code,create_access_token)
 from src.helper.file_helper import FileHelper
-from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswordNotification,AccountVerifyNotification,NotificationChannel, TwoFactorAuthNotification)
+from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswordNotification, LoginAlertNotification, TwoFactorAuthNotification)
 from src.config import settings
 from src.api.user.service import UserService
 from src.api.auth.service import AuthService
@@ -63,6 +62,56 @@ async def login_for_access_token( request: Request,
         ),
         "user": user
     }
+
+@router.post("/two-factor-token", response_model=UserTokenOut)
+async def two_factor_token(response: Response,request: Request,
+    form_data: ValidateChangeCodeInput, user_service: UserService = Depends(), token_service: AuthService = Depends()
+) -> UserTokenOut:
+
+    code = await token_service.get_two_factor_code(email=form_data.email,code=form_data.code)   
+    
+    if  code == None :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                    message=ErrorMessage.EMAIL_NOT_FOUND.description,
+                    error_code= ErrorMessage.EMAIL_NOT_FOUND.value
+                ).model_dump()
+        )
+    if not code.active  : 
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                    message=ErrorMessage.CODE_ALREADY_USED.description,
+                    error_code= ErrorMessage.CODE_ALREADY_USED.value
+                ).model_dump()
+        )
+    if code.end_time.tzinfo is None:
+        code.end_time = code.end_time.replace(tzinfo=timezone.utc)           
+    if code.end_time <= datetime.now(timezone.utc)  : 
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                    message=ErrorMessage.CODE_HAS_EXPIRED.description,
+                    error_code= ErrorMessage.CODE_HAS_EXPIRED.value
+                ).model_dump()
+        )
+
+    user = await user_service.get_by_id( user_id=code.user_id )
+    await token_service.make_two_factor_code_used(id=code.id)
+    
+    refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
+    
+    
+    access_token = create_access_token(data={"sub": user.id})
+    
+
+    return {
+            "access_token" : Token(
+                token=access_token, token_type="bearer", expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,refresh_token= token,device_id=refresh_token.id
+            ),
+            "user" :user
+        }
 
 
 @router.post("/refresh-token", response_model=UserTokenOut)
@@ -216,7 +265,7 @@ async def change_email(
                 ).model_dump()
         )
     
-    user_by_email = await user_service.get_by_email(input.account)
+    user_by_email = await user_service.get_by_email(input.email)
 
     if user_by_email :
         raise HTTPException(
@@ -247,14 +296,14 @@ async def change_email(
     return {
             "message": "Save successfully",
             "data" : {
-                "account" :input.email
+                "email" :input.email
             },
             "success": True
         }
 
 
-@router.post("/validate-change-account-code", response_model=UserOutSuccess)
-async def validate_change_account_code(
+@router.post("/validate-change-email-code", response_model=UserOutSuccess)
+async def validate_change_email_code(
     current_user: Annotated[User, Depends(get_current_active_user)],validate_input: ValidateChangeCodeInput, user_service : Annotated[UserService , Depends()], token_service : Annotated[AuthService, Depends()]
 ):
 
@@ -288,11 +337,11 @@ async def validate_change_account_code(
         )
 
     user = await user_service.update_phone_or_email( user_id= code.user_id,email=code.email  )
-    await token_service.make_forgotten_password_used(id=code.id)
+    await token_service.make_change_email_used(id=code.id)
     
     return {
         "data" : user,
-        "message" : "account change successfully"
+        "message" : "email change successfully"
     }
 
 @router.get("/me", response_model=UserOutSuccess)
@@ -382,50 +431,6 @@ async def update_profile_image(
         "message" : "picture image updated successfully"
     }
 
-
-
-@router.post("/code-auth",response_model=UserTokenOut)
-async def code_auth(response: Response,
-    form_data: AuthCodeInput, token_service : Annotated[AuthService, Depends()],user_service : Annotated[UserService , Depends()]
-) :
-    code = await token_service.delete_temp_auth_code(form_data.code)
-    
-    
-    if code == None  : 
-        raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=BaseOutFail(
-                    message=ErrorMessage.CODE_NOT_EXIST.describe,
-                    error_code= ErrorMessage.CODE_NOT_EXIST.value
-                ).model_dump()
-            )
-        
-        
-    if code.end_time.tzinfo is None:
-        code.end_time = code.end_time.replace(tzinfo=timezone.utc) 
-    
-    if code.end_time <= datetime.now(timezone.utc)  : 
-        
-        raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=BaseOutFail(
-                    message=ErrorMessage.CODE_HAS_EXPIRED.describe,
-                    error_code= ErrorMessage.CODE_HAS_EXPIRED.value
-                ).model_dump()
-            )
-    
-    user = await user_service.get_by_id(user_id=code.user_id)
-    refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
-    
-    
-    access_token =  create_access_token(data={"sub": user.id})
-
-    return {
-            "access_token" : Token(
-                token=access_token, token_type="bearer", expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,refresh_token= token,device_id=refresh_token.id
-            ),
-            "user" :user
-        }
 
 
 @router.post("/oauth/token")
