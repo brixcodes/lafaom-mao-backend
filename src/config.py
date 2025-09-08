@@ -16,7 +16,7 @@ def route_task(name, args, kwargs, options, task=None, **kw):
     if ":" in name:
         queue, _ = name.split(":")
         return {"queue": queue}
-    return {"queue": "laakam_iam_default"}
+    return {"queue": "lafaom_default"}
 
 class Settings(BaseSettings):
     
@@ -78,11 +78,6 @@ class Settings(BaseSettings):
     FCM_SERVER_KEY:str = ""
     
     
-    ## Credential to connect to Toupesu Whatsapp API
-    TOUPESU_WHATSAPP_CLIENT_ID : str = ""
-    TOUPESU_WHATSAPP_CLIENT_SECRET : str = ""
-    TOUPESU_WHATSAPP_URL : str = ""
-    
     
     #Prefer storage location
     STORAGE_LOCATION: Literal["local","S3"] = "local"  #local,S3
@@ -108,30 +103,8 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_RESULT_BACKEND: str =  "redis://127.0.0.1:6379/0"
 
-
-
-    ## LinkedIn in oauth login credentials
-    LINKEDIN_CLIENT_ID : str = ""
-    LINKEDIN_CLIENT_SECRET : str = ""
-    LINKEDIN_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/linkedin/callback"
-    
-    
-    ## Github in oauth login credentials
-    GITHUB_CLIENT_ID : str = ""
-    GITHUB_CLIENT_SECRET : str = ""
-    GITHUB_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/github/callback"
-    
-    
-    ## Google in oauth login credentials
-    GOOGLE_CLIENT_ID : str = ""
-    GOOGLE_CLIENT_SECRET : str = ""
-    GOOGLE_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/google/callback"
-    
-    
-    ## Facebook in oauth login credentials
-    FACEBOOK_CLIENT_ID : str = ""
-    FACEBOOK_CLIENT_SECRET : str = ""
-    FACEBOOK_REDIRECT_URL : str = "http://localhost:8000/api/v1/auth/facebook/callback"
+    JWK_ISS : str = "lafoam.com"
+    JWK_ALGORITHM : str = "RS256"
 
     CELERY_BEAT_SCHEDULE: dict = {
         # "task-schedule-work": {
@@ -150,17 +123,17 @@ class Settings(BaseSettings):
         
     }
     
-    REDIS_NAMESPACE:str = "laakam_iam"
+    REDIS_NAMESPACE:str = "lafaom"
 
-    CELERY_TASK_DEFAULT_QUEUE: str = "laakam_iam_default"
+    CELERY_TASK_DEFAULT_QUEUE: str = "lafaom_default"
 
     # Force all queues to be explicitly listed in `CELERY_TASK_QUEUES` to help prevent typos
     CELERY_TASK_CREATE_MISSING_QUEUES: bool = False
 
     CELERY_TASK_QUEUES: list[Queue]  = [
-        Queue("laakam_iam_default"),
-        Queue("laakam_iam_high_priority"),
-        Queue("laakam_iam_low_priority"),
+        Queue("lafaom_default"),
+        Queue("lafaom_high_priority"),
+        Queue("lafaom_low_priority"),
     ]
 
     CELERY_TASK_ROUTES: ClassVar[tuple] = (route_task,)

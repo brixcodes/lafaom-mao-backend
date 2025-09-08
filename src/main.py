@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError,HTTPException
 from fastapi.responses import JSONResponse
+from src.api.auth.utils import rotate_key
 from src.config import settings
 from src.api.user.router import router as user_router
 from src.api.auth.router import router as auth_router
@@ -122,3 +123,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )  
+
+@app.on_event("startup")
+async def startup_event():
+    #wait rotate_key()
+    pass

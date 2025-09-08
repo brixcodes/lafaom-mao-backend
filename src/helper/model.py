@@ -19,14 +19,4 @@ class CustomBaseUUIDModel(SQLModel):
     delete_at: Optional[datetime] = Field(default=None, nullable=True, sa_type=TIMESTAMP(timezone=True))
     
 
-class TokenData(CustomBaseModel,table=True):
-    __tablename__ = "token_data"
-    
-    token_string : str= Field(nullable=False,default="")
-    token_type : str= Field(nullable=False,default="")
-    expires_at: Optional[datetime] = Field(
-        default=None,
-        nullable=True,
-        sa_type=TIMESTAMP(timezone=True)
-    )
 

@@ -1,9 +1,12 @@
-from typing import Annotated, List
+import os
+import sys
+from typing import Annotated, List, Optional, Set
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials,HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 from src.api.user.service import UserService
+from src.helper.file_helper import FileHelper
 from src.helper.schemas import BaseOutFail,ErrorMessage
 from src.api.user.models import  User
 import random
@@ -11,10 +14,11 @@ import string
 import jwt
 from datetime import datetime, timedelta, timezone
 from src.config import settings
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-import httpx
-from firebase_admin import auth as firebase_auth
+
+import  uuid
+from cryptography.hazmat.primitives import serialization
+from src.config import settings
+from jwcrypto import jwk
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -130,63 +134,133 @@ def generate_random_code(length=5):
     return ''.join(random.choice(characters) for _ in range(length)).upper()
 
 
-
-async def verify_google_token(token: str, platform: str = "web"):
+def list_keys_in_s3():
+    """List all keys in S3 for this environment."""
+    prefix = f"private/{settings.ENV}/rsa/"
     
+    resp = FileHelper.get_aws_list_objects_v2(prefix=prefix)
+    if "Contents" not in resp:
+        return []
+    return [obj["Key"] for obj in resp["Contents"]]
+
+def load_key_from_s3(key_name: str):
+    """Load a key JSON from S3 and return JWK object."""
+    obj = FileHelper.get_aws_object(key=key_name)
+    return jwk.JWK.from_json(obj["Body"].read().decode("utf-8"))
+
+def get_all_keys():
+    """Return a dict of {kid: JWK} for this environment."""
+    keys = {}
+    for key_name in list_keys_in_s3():
+        kid = os.path.splitext(os.path.basename(key_name))[0]
+        keys[kid] = load_key_from_s3(key_name)
+    return keys
+
+def get_active_key():
+    """Load the newest key as active key (last by timestamp)."""
+    keys = list_keys_in_s3()
+    if not keys:
+        raise Exception("No keys found in S3!")
+    keys.sort(reverse=True)  # newest last
+    active_key_name = keys[0]
+    kid = os.path.splitext(os.path.basename(active_key_name))[0]
+    return kid, load_key_from_s3(active_key_name)
+
+
+def make_access_token(sub: str, aud: str, scope: str, ttl=600):
+    kid, active_key = get_active_key()
+    now = datetime.now(timezone.utc)
+    payload = {
+        "iss": settings.JWK_ISS, "sub": sub, "aud": aud, "scope": scope,
+        "iat": int(now.timestamp()), "exp": int((now + timedelta(seconds=ttl)).timestamp()),
+        "jti": str(uuid.uuid4()),
+    }
+    token = jwt.encode(
+        payload,
+        active_key.export_to_pem(private_key=True, password=None),
+        algorithm=settings.JWK_ALGORITHM,
+        headers={"kid": kid}
+    )
+    return token
+
+
+def generate_kid():
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{settings.ENV}-{settings.JWK_ALGORITHM}-{timestamp}"
+
+async def rotate_key():
     
-    try:
-        idinfo = id_token.verify_oauth2_token(id_token=token, request=google_requests.Request())
-        if idinfo["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
-            raise HTTPException(status_code=403, detail="Invalid token issuer")
+    kid = generate_kid()
+    key = jwk.JWK.generate(kty="RSA", size=2048)
 
-        # Ensure it was issued to one of your apps
-        #if idinfo["aud"] == settings.GOOGLE_CLIENT_ID and platform == "web":
-        #    raise HTTPException(status_code=403, detail="Invalid audience")
+    key_json = key.export(private_key=True)
+    s3_key = f"{settings.ENV}/rsa/{kid}.json"
     
-        return {
-                "provider_user_id": idinfo["sub"],
-                "email": idinfo["email"],
-                "first_name": idinfo.get("given_name", ""),
-                "last_name": idinfo.get("family_name", ""),
-                "picture": idinfo.get("picture")
-            }
-    except Exception as e:
-        print(e)
-        return None
+    await FileHelper.upload_private_byte(key_json, location=f"{settings.ENV}/rsa/", name=kid, content_type="json")
 
-
-
-async def verify_facebook_token(token: str):
-    async with httpx.AsyncClient() as client:
-        # Get user info
-        user_info_url = f"https://graph.facebook.com/me?fields=id,first_name,last_name,email,picture&access_token={token}"
-        resp = await client.get(user_info_url)
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        return {
-            "provider_user_id": data["id"],
-            "email": data.get("email"),
-            "first_name": data.get("first_name"),
-            "last_name": data.get("last_name"),
-            "picture": data.get("picture", {}).get("data", {}).get("url")
-        }
-
-
-
-async def verify_firebase_token(token: str):
+    print(f"✅ New key created: {s3_key} with kid={kid}")
     
-    try:
-        decoded_token = firebase_auth.verify_id_token(token)
-        return {
-                "provider_user_id": decoded_token["uid"],
-                "email": decoded_token.get("email", ""),
-                "first_name": decoded_token.get("name", "").split(" ")[0] if decoded_token.get("name") else "",
-                "last_name": decoded_token.get("name", "").split(" ")[1] if decoded_token.get("name") and len(decoded_token["name"].split(" ")) > 1 else "",
-                "picture": decoded_token.get("picture")
-        }
-    
-    except Exception as e:
-        print(e)
-        
-        return None
+
+
+
+
+# In prod, use Redis/DB. This is a simple in-memory denylist for demo purposes.
+_REVOKED_JTIS: Set[str] = set()
+
+def revoke_jti(jti: str):
+    _REVOKED_JTIS.add(jti)
+
+def _ensure(required_scopes: Set[str], token_scopes: Set[str]):
+    if required_scopes and not required_scopes.issubset(token_scopes):
+        raise HTTPException(status_code=403, detail="insufficient_scope")
+
+def require_oauth_client(required_scopes: Optional[Set[str]] = None, accepted_auds: Optional[Set[str]] = None):
+    required_scopes = required_scopes or set()
+    accepted_auds = accepted_auds or set()
+
+    async def _dep(credentials = Depends(oauth2_scheme)):
+        token = credentials.credentials
+        try:
+            # 1) Get KID and resolve key
+            header = jwt.get_unverified_header(token)
+            kid = header.get("kid")
+            if not kid:
+                raise HTTPException(status_code=401, detail="missing_kid")
+            
+            
+            key_obj = get_all_keys()[kid]
+
+            pub_pem = key_obj.export_to_pem(private_key=False, password=None) 
+
+            payload = jwt.decode(
+                token,
+                pub_pem,
+                algorithms=[settings.JWK_ALGORITHM],
+                issuer=settings.JWK_ISS,
+                options={"require": ["exp", "iat", "iss", "sub"]},
+                audience="content-lafaom",
+                leeway=5,
+            )
+
+            # 3) Basic custom checks
+            if payload.get("typ") not in (None, "access"):  # if you set typ="access"
+                raise HTTPException(status_code=401, detail="wrong_token_type")
+
+            # 4) Revocation / replay defense
+            jti = payload.get("jti")
+            if jti and jti in _REVOKED_JTIS:
+                raise HTTPException(status_code=401, detail="token_revoked")
+
+            # 5) Scope
+            token_scopes = set(payload.get("scope", "").split())
+            _ensure(required_scopes, token_scopes)
+
+            return payload  # pass claims to the route
+        except HTTPException as e:
+            print(e.with_traceback(sys.exc_info()[2]))
+            raise
+        except Exception as e:
+            print(e.with_traceback(sys.exc_info()[2]))
+            raise HTTPException(status_code=401, detail="invalid_or_expired_token")
+
+    return _dep

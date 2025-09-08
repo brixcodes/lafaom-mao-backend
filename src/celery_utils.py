@@ -24,16 +24,16 @@ def create_celery():
         worker_prefetch_multiplier=1,
         task_reject_on_worker_lost=True,
         broker_transport_options={
-                "global_keyprefix": "laakam_iam:" 
+                "global_keyprefix": "lafaom:" 
             },
         result_backend_transport_options={
-                "global_keyprefix": "laakam_iam:" 
+                "global_keyprefix": "lafaom:" 
             },
-        task_default_queue="laakam_iam_default",
+        task_default_queue="lafaom_default",
         task_queues={
-            "laakam_iam_default": {
-                "exchange": "laakam_iam",
-                "routing_key": "laakam_iam.default",
+            "lafaom_default": {
+                "exchange": "lafaom",
+                "routing_key": "lafaom.default",
             },
         }
         # Other configurations

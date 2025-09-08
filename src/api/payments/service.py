@@ -43,6 +43,19 @@ class UserService:
         user = result.scalars().first()
         return user
 
+    async def get_by_account(self, account: str):
+        statement = select(User).where(
+            or_(User.email == account, User.phone_number == account)
+        )
+        result = await self.session.execute(statement)
+        user = result.scalars().first()
+        return user
+
+    async def get_by_phone(self, user_phone: str):
+        statement = select(User).where(User.phone_number == user_phone)
+        result = await self.session.execute(statement)
+        user = result.scalars().first()
+        return user
     
     
     async def get_users_by_id_lists(self, user_ids: List[str]):
@@ -84,13 +97,30 @@ class UserService:
         await self.session.refresh(user)
         return user
 
-
-    async def update_phone_or_email(self, user_id: str, email: str):
+    async def update_account_setting(self, user_id: str, input: UpdateAccountSettingInput):
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
 
-        user.email = email
+        if input.prefer_notification is not None:
+            user.prefer_notification = input.prefer_notification
+
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
+    async def update_phone_or_email(self, user_id: str, account: str):
+        statement = select(User).where(User.id == user_id)
+        result = await self.session.execute(statement)
+        user = result.scalars().one()
+
+        email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'  # Simple regex for email validation
+
+        if not re.match(email_regex, account):
+            user.phone_number = account
+        else:
+            user.email = account
 
         self.session.add(user)
         await self.session.commit()
@@ -112,13 +142,17 @@ class UserService:
         await self.session.refresh(user)
         return user
     
-    async def update_device_id(self, user_id: str, input: UpdateDeviceInput):
+    async def update_device_id(self, user_id: str,device_type : str , input: UpdateDeviceInput):
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
         
-
-        user.web_token = input.device_id
+        if device_type == DeviceType.ANDROID:
+            user.android_token = input.device_id
+        elif device_type == DeviceType.IOS:
+            user.ios_token = input.device_id
+        elif device_type == DeviceType.WEB:
+            user.web_token = input.device_id
 
         self.session.add(user)
         await self.session.commit()
@@ -139,7 +173,7 @@ class UserService:
 
 
     async def permission_set_up(self):
-        statement = select(User).where(User.email == "admin@lafaom.com")
+        statement = select(User).where(User.email == "admin@laakam.com")
         result = await self.session.execute(statement)
         user = result.scalars().first()
 
@@ -148,7 +182,7 @@ class UserService:
                 first_name="admin",
                 last_name="admin",
                 country_code="CM",
-                email="admin@lafaom.com",
+                email="admin@laakam.com",
                 phone_number="0000000000",
                 lang="en",
                 status=UserStatusEnum.ACTIVE,

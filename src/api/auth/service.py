@@ -2,7 +2,7 @@ from fastapi import Depends
 import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session_async
-from src.api.auth.models import RefreshToken,TempUser,ForgottenPAsswordCode,ChangeEmailCode,AuthUserProvider,AuthTempCode
+from src.api.auth.models import RefreshToken,TempUser,ForgottenPAsswordCode,ChangeEmailCode,AuthUserProvider,AuthTempCode, TwoFactorCode
 from src.api.auth.schemas import Provider, RegisterProviderInput
 from src.api.user.service import UserService
 from sqlmodel import select, delete
@@ -49,56 +49,33 @@ class AuthService:
         await self.session.execute(statement)
         await self.session.commit()
 
-    async def get_temp_user(self, email:str,code:str  ):
+    async def get_forgotten_password_code(self, email:str,code:str  ):
         
-        statement = select(TempUser).where(TempUser.email == email).where(TempUser.code == code)
+        statement = select(ForgottenPAsswordCode).where(ForgottenPAsswordCode.email == email).where(ForgottenPAsswordCode.code == code)
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
     
-    async def get_forgotten_password_code(self, account:str,code:str  ):
+    
+    async def get_change_email_code(self, email:str,code:str , user_id : str ) -> ChangeEmailCode  | None:
         
-        statement = select(ForgottenPAsswordCode).where(ForgottenPAsswordCode.account == account).where(ForgottenPAsswordCode.code == code)
+        statement = select(ChangeEmailCode).where(ChangeEmailCode.email == email).where(ChangeEmailCode.code == code).where(ChangeEmailCode.user_id == user_id)
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
     
-    async def make_temp_user_used(self, temp_id  ):
+    async def save_change_email_code(self,user_id :str ,  email : str, code : str   ):
         
-        statement = select(TempUser).where(TempUser.id == temp_id)
-        result = await self.session.execute(statement)
-        temp_user = result.scalar_one_or_none()
-        temp_user.active = False
-        await self.session.commit()
-        
-        return temp_user
-        
-        return temp_user.first()
-    
-    async def get_change_email_code(self, account:str,code:str , user_id : str ) -> ChangeEmailCode  | None:
-        
-        statement = select(ChangeEmailCode).where(ChangeEmailCode.account == account).where(ChangeEmailCode.code == code).where(ChangeEmailCode.user_id == user_id)
-        result = await self.session.execute(statement)
-        return result.scalar_one_or_none()
-    
-    async def save_change_email_code(self,user_id :str ,  account : str, code : str   ):
-        
-        code = ChangeEmailCode(account=account,code=code,user_id=user_id,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
+        code = ChangeEmailCode(email=email,code=code,user_id=user_id,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
         await self.session.merge(code)
         await self.session.commit()
         return code
     
-    async def save_forgotten_password_code(self,user_id :str , account : str, code : str  ):
+    async def save_forgotten_password_code(self,user_id :str , email : str, code : str  ):
         
-        code = ForgottenPAsswordCode(user_id=user_id,account=account,code=code,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
+        code = ForgottenPAsswordCode(user_id=user_id,email=email,code=code,end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES))
         await self.session.merge(code)
         await self.session.commit()
         return code
     
-    async def save_temp_user(self, input : dict  ):
-        input["password"] = pwd_context.hash(input["password"])
-        temp_user = TempUser(**input)
-        await self.session.merge(temp_user)
-        await self.session.commit()
-        return temp_user
     
     async def make_forgotten_password_used(self, id : int  ):
         
@@ -121,84 +98,36 @@ class AuthService:
         
         return code
     
-    async def add_user_provider(self,user_id: str, provider : Provider , user_provider_id : str) : 
-        
-        user_provider = AuthUserProvider(user_provider_id=user_provider_id,user_id=user_id,provider=provider)
-        await self.session.merge(user_provider)
-        await self.session.commit()
-        return user_provider
     
-    async def get_user_provider(self,provider : Provider , user_provider_id : str) : 
-        
-        statement = (select(AuthUserProvider)
-                        .where(AuthUserProvider.user_provider_id == user_provider_id)
-                        .where(AuthUserProvider.provider == provider)
-                    )
-        result = await self.session.execute(statement)
-        return result.scalar_one_or_none()
-    
-    
-    async def make_provider_auth(self,provider : Provider , user_provider_id : str,user_input : RegisterProviderInput) : 
-        user_service = UserService(session =self.session)
-        
-        user_provider = await self.get_user_provider(provider=provider, user_provider_id=user_provider_id)
-    
-        if user_provider == None :
-            
-            user = await user_service.get_by_email(user_email= user_input.email)
-            
-            if user == None :
-                user_input.password = secrets.token_urlsafe(8)
 
-                user = await user_service.create(user_input)
-            
-            user_provider = await self.add_user_provider(user_id=user.id,user_provider_id=user_provider_id,provider=provider)
-        
-        code = await self.create_temp_auth_code(user_id=user_provider.user_id)
-        
-        return code.code 
+    def save_two_factor_code(self, code : str, user_id : str, email : str  ):
+        statement = select(TwoFactorCode).where(TwoFactorCode.user_id == user_id).where(TwoFactorCode.active == True).order_by(TwoFactorCode.id.desc())
+        old_code = self.session.exec(statement).first()
+        if old_code != None :
+            old_code.active = False
+            self.session.add(old_code)
+            self.session.commit()
 
-    async def make_provider_register(self,provider : Provider , user_provider_id : str,user_input : RegisterProviderInput) : 
-        user_service = UserService(session =self.session)
-        
-        user_provider = await self.get_user_provider(provider=provider, user_provider_id=user_provider_id)
+        code = TwoFactorCode(code=code,user_id=user_id,email=email,end_time=datetime.now(timezone.utc) + timedelta(minutes=30))
+        self.session.add(code)
+        self.session.commit()
+        self.session.refresh(code)
+        return code
     
-        if user_provider == None :
-            
-            user = await user_service.get_by_email(user_email= user_input.email)
-            
-            if user == None :
-                user_input.password = secrets.token_urlsafe(8)
-
-                user = await user_service.create(user_input)
-            
-            user_provider = await self.add_user_provider(user_id=user.id,user_provider_id=user_provider_id,provider=provider)
+    def get_two_factor_code(self,  code : str, email : str  ):
         
-        user = await user_service.get_by_id(user_id=user_provider.user_id)
+        statement = select(TwoFactorCode).where(TwoFactorCode.email == email).where(TwoFactorCode.code == code).order_by(TwoFactorCode.id.desc())
+        code = self.session.exec(statement).first()
         
-        return user 
-
-
+        return code
     
-    async def create_temp_auth_code(self,user_id: str,expires_delta = None) : 
+    def make_two_factor_code_used(self, id : int  ):
         
-        expires_at = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=3600))
-        token = secrets.token_urlsafe(144)
-        auth_code = AuthTempCode(code=token,user_id=user_id,end_time=expires_at)
-        await self.session.merge(auth_code)
-        await self.session.commit()
-        return auth_code
-    
-    async def delete_temp_auth_code(self,code: str) : 
+        statement = select(TwoFactorCode).where(TwoFactorCode.id == id)
+        code = self.session.exec(statement).first()
+        code.active = False
+        self.session.add(code)
+        self.session.commit()
+        self.session.refresh(code)
         
-        statement = select(AuthTempCode).where(AuthTempCode.code == code)
-        result = await self.session.execute(statement)
-        auth_code = result.scalar_one_or_none()
-        if auth_code == None :
-            return None
-        
-        await self.session.delete(auth_code)
-        await self.session.commit()
-        
-        return auth_code
-
+        return code
