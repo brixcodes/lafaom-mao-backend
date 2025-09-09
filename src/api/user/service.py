@@ -91,7 +91,7 @@ class UserService:
             user_filter.page_size
         )
         result = await self.session.execute(statement)
-        users = result.all()
+        users = result.scalars().all()
 
         return users, total_count
 
@@ -330,7 +330,6 @@ class UserService:
         result = await self.session.execute(statement)
         user = result.scalars().one()
         user.delete_at = datetime.now(timezone.utc)
-        self.session.add(user)
         await self.session.commit()
         return user
 
@@ -360,24 +359,24 @@ class UserService:
         await self.session.commit()
         return  {"user_id": user_id, "role_id": role_id}
     
-    async def assign_permissions(self, user_id: str, permission_ids: list[int]):
-        for permission_id in permission_ids:
-            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission_id )
+    async def assign_permissions(self, user_id: str, permissions: list[str]):
+        for permission in permissions:
+            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission )
             result = await self.session.execute(statement)
             user_permission = result.scalars().one_or_none()
             if user_permission is not None:    
                 continue
 
-            user_permission = UserPermission(user_id=user_id, permission=permission_id)
+            user_permission = UserPermission(user_id=user_id, permission=permission)
             self.session.add(user_permission)
             await self.session.commit()
             await self.session.refresh(user_permission)
             
-        return {"user_id": user_id, "permission_ids": permission_ids}
+        return {"user_id": user_id, "permission_ids": permissions}
 
-    async def revoke_permissions(self, user_id: str, permission_ids: list[int]):
-        for permission_id in permission_ids:
-            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission_id )
+    async def revoke_permissions(self, user_id: str, permissions: list[str]):
+        for permission in permissions:
+            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission )
             result = await self.session.execute(statement)
             user_permission = result.scalars().one_or_none()
             if user_permission is None:    
@@ -385,7 +384,7 @@ class UserService:
 
             self.session.delete(user_permission)
             await self.session.commit()
-        return {"user_id": user_id, "permission_ids": permission_ids}
+        return {"user_id": user_id, "permission_ids": permissions}
     
     async def get_all_user_permissions(self, user_id: str):
         statement = select(UserRole.role_id).where(UserRole.user_id == user_id)

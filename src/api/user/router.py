@@ -9,7 +9,7 @@ from src.api.user.dependencies import get_user
 from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
-from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess)
+from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ async def assign_permissions(
     user_service: UserService = Depends()
 ):
     
-    await user_service.assign_permissions(input)
+    await user_service.assign_permissions(user_id=input.user_id, permissions=input.permissions)
     
     user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
     
@@ -35,7 +35,7 @@ async def revoke_permissions(
     user_service: UserService = Depends()
 ):
     
-    await user_service.revoke_permissions(input)
+    await user_service.revoke_permissions(user_id=input.user_id, permissions=input.permissions)
     
     user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
     
@@ -48,7 +48,7 @@ async def assign_roles(
     user_service: UserService = Depends()
 ):
     
-    await user_service.assign_role(input)
+    await user_service.assign_role(user_id=input.user_id, role_id=input.role_id)
     
     user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
     
@@ -61,7 +61,7 @@ async def revoke_roles(
     user_service: UserService = Depends()
 ):
     
-    await user_service.revoke_role(input)
+    await user_service.revoke_role(user_id=input.user_id, role_id=input.role_id)
     
     user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
     
@@ -75,9 +75,9 @@ async def get_user_permissions(
     
     user_permissions = await user_service.get_all_user_permissions(user_id=current_user.id)
     
-    return  { "message" : "Roles revoked successfully", "data" : user_permissions }
+    return  { "message" : "User Permissions", "data" : user_permissions }
 
-@router.get("/users", response_model=UserListOutSuccess,tags=["Users"])
+@router.get("/users", response_model=UsersPageOutSuccess,tags=["Users"])
 async def read_user_list( 
         current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
         filter_query: Annotated[UserFilter, Query(...)],
@@ -85,6 +85,7 @@ async def read_user_list(
     ):
 
     users , counted  = await user_service.get(user_filter=filter_query)
+    
     return {
         "data": users,
         "page": filter_query.page,
@@ -92,7 +93,7 @@ async def read_user_list(
         "total_number": counted,
     }
 
-@router.post("/users", response_model=UserListOutSuccess,tags=["Users"])
+@router.post("/users", response_model=UserOutSuccess,tags=["Users"])
 async def read_user_list( 
         user_create_input: CreateUserInput,
         current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
@@ -155,7 +156,7 @@ async def delete_user(
     user : Annotated[User, Depends(get_user)],
     user_service: UserService = Depends(),
 ):
-    user = user_service.delete_user(user_id)
+    user = await user_service.delete_user(user_id)
     return {"data" : user, "message":"Users updated successfully" }   
 
 

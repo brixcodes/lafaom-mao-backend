@@ -91,7 +91,7 @@ class UserPermission(CustomBaseModel,table=True):
     __tablename__ = "user_permission"
 
     user_id : str | None = Field(default=None,foreign_key="users.id")
-    role_id : int | None = Field(nullable=False,foreign_key="role.id" )
+    role_id : int | None = Field(default=None,nullable=True,foreign_key="role.id" )
     permission : str = Field(nullable=False)
 
 class SchoolCurriculum(CustomBaseModel,table=True):
@@ -137,8 +137,8 @@ class User(CustomBaseUUIDModel,table=True):
     birth_date: date | None = Field(nullable=True)
     civility : str | None = Field(nullable=True)
     country_code : str | None = Field(nullable=True,max_length=4)
-    mobile_number : str | None = Field(nullable=True,index=True,unique=True)
-    fix_number: str | None = Field(nullable=True,index=True,unique=True)
+    mobile_number : str | None = Field(nullable=True,index=True)
+    fix_number: str | None = Field(nullable=True,index=True)
     email: str | None = Field(nullable=True,index=True,unique=True)
     password: str = Field(nullable=False)
     picture : str | None = Field(nullable=True)

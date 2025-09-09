@@ -16,8 +16,8 @@ def create_celery():
         namespace="CELERY",
         broker_url=settings.CELERY_BROKER_URL,  # rediss://...
         result_backend=settings.CELERY_RESULT_BACKEND,  # rediss://...
-        broker_use_ssl=ssl_options,
-        redis_backend_use_ssl=ssl_options,
+        #broker_use_ssl=ssl_options,
+        #redis_backend_use_ssl=ssl_options,
         broker_connection_retry_on_startup=True,
         task_default_retry_delay=5,
         task_acks_late=True,

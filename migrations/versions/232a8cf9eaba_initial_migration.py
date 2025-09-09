@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: cfd3487737c1
+Revision ID: 232a8cf9eaba
 Revises: 
-Create Date: 2025-09-09 15:48:04.046152
+Create Date: 2025-09-09 17:13:58.722045
 
 """
 from typing import Sequence, Union
@@ -14,7 +14,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'cfd3487737c1'
+revision: str = '232a8cf9eaba'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -65,8 +65,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_index(op.f('ix_users_fix_number'), 'users', ['fix_number'], unique=True)
-    op.create_index(op.f('ix_users_mobile_number'), 'users', ['mobile_number'], unique=True)
+    op.create_index(op.f('ix_users_fix_number'), 'users', ['fix_number'], unique=False)
+    op.create_index(op.f('ix_users_mobile_number'), 'users', ['mobile_number'], unique=False)
     op.create_table('addresses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
@@ -153,7 +153,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('role_id', sa.Integer(), nullable=False),
+    sa.Column('role_id', sa.Integer(), nullable=True),
     sa.Column('permission', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.ForeignKeyConstraint(['role_id'], ['role.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),

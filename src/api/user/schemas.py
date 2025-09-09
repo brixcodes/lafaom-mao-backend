@@ -2,12 +2,12 @@ from pydantic import BaseModel,Field
 from typing import List,Optional,Literal
 from datetime import date, datetime
 from src.api.user.models import UserTypeEnum
-from src.helper.schemas import BaseOutSuccess
+from src.helper.schemas import BaseOutPage, BaseOutSuccess
 
 
 
 class CreateUserInput(BaseModel):
-    id : str
+
     first_name: str 
     last_name: str 
     password: str
@@ -25,7 +25,7 @@ class CreateUserInput(BaseModel):
     
 
 class UpdateUserInput(BaseModel):
-    id : str
+    
     first_name: str 
     last_name: str 
     password: str
@@ -122,7 +122,7 @@ class UserFullOut(UserSimpleOut):
 
 class UserOutSuccess(BaseOutSuccess):
     
-    data: UserOut 
+    data: UserSimpleOut 
 
 class UserFullOutSuccess(BaseOutSuccess):
     
@@ -131,18 +131,18 @@ class UserFullOutSuccess(BaseOutSuccess):
     
 class UserListOutSuccess(BaseOutSuccess):
     
-    data: List [UserOut]  
+    data: List [UserSimpleOut]  
     
-class UsersPageOutSuccess(BaseOutSuccess):
+class UsersPageOutSuccess(BaseOutPage):
     
-    data: List [UserOut]
+    data: List [UserSimpleOut]
 
 class UserFilter(BaseModel):
     page: int | None = Field(1, ge=1)
     page_size: int | None = Field(20, ge=20)
-    search : str | None
-    user_type : UserTypeEnum | None
-    country_code : str | None
+    search : Optional[str] = None
+    user_type :  Optional[UserTypeEnum] = None
+    country_code : Optional[str] = None
     
     order_by:  Literal["created_at", "last_login","first_name","last_name"] = "created_at"
     asc :  Literal["asc", "desc"] = "asc"
@@ -167,8 +167,9 @@ class RoleListOutSuccess(BaseOutSuccess):
     data : List[RoleOut]    
     
 class PermissionOut(BaseModel):
-    id : int
-    name : str
+    user_id : str | None
+    role_id : int | None
+    permission : str
 
 class PermissionOutSuccess(BaseOutSuccess):
     data : PermissionOut
