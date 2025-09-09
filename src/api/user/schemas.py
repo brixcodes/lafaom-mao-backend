@@ -71,7 +71,7 @@ class UserListInput(BaseModel):
 
 
 class ProfessionStatusOut(BaseModel):
-    id : str
+    id : int
     professional_status : Optional[str] =""
     professional_experience_in_months : int  = 0
     socio_professional_category : Optional[str] ="" 
@@ -80,7 +80,7 @@ class ProfessionStatusOut(BaseModel):
     created_at : datetime
 
 class AddressOut(BaseModel):
-    id : str
+    id : int
     country_code: Optional[str]  =""
     city: Optional[str]  =""
     street: Optional[str]  =""
@@ -108,7 +108,7 @@ class UserSimpleOut(BaseModel):
     created_at : datetime
     
 class SchoolCurriculumOut(BaseModel):
-    id : str
+    id : int
     qualification : Optional[str] =""
     last_degree_obtained : Optional[str] =""
     date_of_last_degree :Optional[date] =""  

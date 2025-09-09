@@ -95,7 +95,15 @@ class UserService:
 
         return users, total_count
 
-    
+    async def update_last_login(self, user_id: str):
+        statement = select(User).where(User.id == user_id)
+        result = await self.session.execute(statement)
+        user = result.scalars().one()
+        user.last_login = datetime.now(timezone.utc)
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
 
     async def create(self, user_create_input, password_hash: bool = False):
         if not password_hash:

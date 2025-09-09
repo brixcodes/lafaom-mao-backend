@@ -53,7 +53,8 @@ async def login_for_access_token( request: Request,
     refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
     access_token = create_access_token(data={"sub": user.id})
     
- 
+    await user_service.update_last_login(user_id=user.id)
+    
 
     return {
         "access_token": Token(
@@ -98,13 +99,12 @@ async def two_factor_token(response: Response,request: Request,
                 ).model_dump()
         )
     user = await user_service.get_full_by_id(user_id=code.user_id)
-    await token_service.make_two_factor_code_used(id=code.id)
+    
     
     refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
     
-    
     access_token = create_access_token(data={"sub": user.id})
-    
+    await token_service.make_two_factor_code_used(id=code.id)
 
     return {
             "access_token" : Token(
@@ -148,7 +148,9 @@ async def get_token_from_refresh_token(request: Request,
     
     access_token = create_access_token(
         data={"sub": user.id})
+    
 
+    
     return {
             "access_token" : Token(
                 token=access_token, token_type="bearer", expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,refresh_token= form_data.refresh_token,device_id = form_data.device_id  
@@ -243,6 +245,7 @@ async def validate_forgotten_password_code(response: Response,
     
     access_token = create_access_token(
         data={"sub": user.id})
+    user = await user_service.get_full_by_id(user_id=user.id)
 
     return {
             "access_token" : Token(
@@ -303,7 +306,7 @@ async def change_email(
         }
 
 
-@router.post("/validate-change-email-code", response_model=UserOutSuccess)
+@router.post("/validate-change-email-code", response_model=UserFullOutSuccess)
 async def validate_change_email_code(
     current_user: Annotated[User, Depends(get_current_active_user)],validate_input: ValidateChangeCodeInput, user_service : Annotated[UserService , Depends()], token_service : Annotated[AuthService, Depends()]
 ):
@@ -339,6 +342,7 @@ async def validate_change_email_code(
 
     user = await user_service.update_phone_or_email( user_id= code.user_id,email=code.email  )
     await token_service.make_change_email_used(id=code.id)
+    user = await user_service.get_full_by_id(user_id=current_user.id)
     
     return {
         "data" : user,
@@ -359,41 +363,43 @@ async def get_me(
 
 
 
-@router.post("/update-profile",response_model=UserOutSuccess)
+@router.post("/update-profile",response_model=UserFullOutSuccess)
 async def update_profile(
     current_user: Annotated[User, Depends(get_current_active_user)],update_input: UpdateUserProfile, user_service : Annotated[UserService , Depends()]
 ):
     user = await user_service.update_profile( user_id= current_user.id,input=update_input  )
+    user = await user_service.get_full_by_id(user_id=current_user.id)
+    return {
+        "data":user,
+        "message" : "profile updated successfully"
+    }
+
+@router.post("/update-addresses",response_model=UserFullOutSuccess)
+async def update_profile(
+    current_user: Annotated[User, Depends(get_current_active_user)],update_input: UpdateAddressInput, user_service : Annotated[UserService , Depends()]
+):
+    primary_address,secondary_address = await user_service.update_address( user_id= current_user.id,input=update_input  )
+    
+    user = await user_service.get_full_by_id(user_id=current_user.id)
     
     return {
         "data":user,
         "message" : "profile updated successfully"
     }
 
-@router.post("/update-addresses",response_model=UserOutSuccess)
-async def update_profile(
-    current_user: Annotated[User, Depends(get_current_active_user)],update_input: UpdateAddressInput, user_service : Annotated[UserService , Depends()]
-):
-    primary_address,secondary_address = await user_service.update_address( user_id= current_user.id,input=update_input  )
-    
-    return {
-        "data":current_user,
-        "message" : "profile updated successfully"
-    }
-
-@router.post("/update-web-id",response_model=UserOutSuccess)
+@router.post("/update-web-id",response_model=UserFullOutSuccess)
 async def update_profile(
     current_user: Annotated[User, Depends(get_current_active_user)],input: UpdateDeviceInput, user_service : Annotated[UserService , Depends()]
 ):
     user = await user_service.update_device_id( user_id= current_user.id, input=input )
-    
+    user = await user_service.get_full_by_id(user_id=current_user.id)
     return {
         "data":user,
         "message" : "Web device ID updated successfully"
     }
     
 
-@router.post("/update-password",response_model=UserOutSuccess)
+@router.post("/update-password",response_model=UserFullOutSuccess)
 async def update_password(
     current_user: Annotated[User, Depends(get_current_active_user)],update_input: UpdatePasswordInput, user_service : Annotated[UserService , Depends()]
 ):
@@ -407,7 +413,7 @@ async def update_password(
         )
     
     user = await user_service.update_password( user_id= current_user.id,password=update_input.new_password  )
-    
+    user = await user_service.get_full_by_id(user_id=current_user.id)
     return {
         "data":user,
         "message" : "password change successfully"
@@ -415,7 +421,7 @@ async def update_password(
 
 
 
-@router.post("/upload-profile-image",response_model=UserOutSuccess)
+@router.post("/upload-profile-image",response_model=UserFullOutSuccess)
 async def update_profile_image(
     current_user: Annotated[User, Depends(get_current_active_user)],image: Annotated[UploadFile, File()], user_service : Annotated[UserService , Depends()]
 ):
@@ -436,7 +442,7 @@ async def update_profile_image(
 
 
     user = await user_service.update_profile_image( user_id= current_user.id,picture= document   )
-    
+    user = await user_service.get_full_by_id(user_id=current_user.id)
     return {
         "data":user,
         "message" : "picture image updated successfully"
