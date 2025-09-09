@@ -2,9 +2,9 @@ from fastapi import Depends
 import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session_async
-from src.api.auth.models import RefreshToken,TempUser,ForgottenPAsswordCode,ChangeEmailCode,AuthUserProvider,AuthTempCode, TwoFactorCode
-from src.api.auth.schemas import Provider, RegisterProviderInput
-from src.api.user.service import UserService
+from src.api.auth.models import RefreshToken,ForgottenPAsswordCode,ChangeEmailCode, TwoFactorCode
+
+
 from sqlmodel import select, delete
 from datetime import timedelta,datetime,timezone
 from passlib.context import CryptContext

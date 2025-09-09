@@ -1,8 +1,12 @@
+from datetime import date, datetime, timezone
 from typing import List
 from fastapi import Depends
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload , aliased, with_expression
+from src.api.user.schemas import UserFilter
 from src.database import get_session_async
-from src.api.user.models import (DeviceType, NotificationChannel, PermissionEnum, User, UserPermission, UserRole, Role, RoleEnum, UserStatusEnum)
-from src.api.auth.schemas import UpdateDeviceInput, UpdateUserInput, UpdateAccountSettingInput
+from src.api.user.models import (Address, AddressTypeEnum, CivilityEnum, PermissionEnum, ProfessionStatus, SchoolCurriculum, User, UserPermission, UserRole, Role, RoleEnum, UserStatusEnum, UserTypeEnum)
+from src.api.auth.schemas import UpdateAddressInput, UpdateCurriculumInput, UpdateDeviceInput, UpdateProfessionStatusInput,  UpdateUserProfile
 from sqlmodel import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
@@ -15,11 +19,83 @@ class UserService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
         self.session = session
 
-    async def get(self):
-        statement = select(User)
+    async def get(self,user_filter : UserFilter):
+        
+        statement = (
+            select(
+                User
+            )
+            .where(User.delete_at.is_(None))
+        )
+
+        count_query = (
+            select(func.count(User.id))
+            .where(User.delete_at.is_(None))
+        )
+
+        if user_filter.search is not None:
+            statement = statement.where(
+                or_(
+                    User.first_name.contains(user_filter.search),
+                    User.last_name.contains(user_filter.search),
+                    User.email.contains(user_filter.search),
+                    User.mobile_number.contains(user_filter.search),
+                    User.fix_number.contains(user_filter.search),
+                    User.country_code.contains(user_filter.search),
+                )
+            )
+            count_query = count_query.where(
+                or_(
+                    User.first_name.contains(user_filter.search),
+                    User.last_name.contains(user_filter.search),
+                    User.email.contains(user_filter.search),
+                    User.mobile_number.contains(user_filter.search),
+                    User.fix_number.contains(user_filter.search),
+                    User.country_code.contains(user_filter.search),
+                )
+            )
+        
+        if  user_filter.user_type is not None:
+            statement = statement.where(User.user_type == user_filter.user_type)
+            count_query = count_query.where(User.user_type == user_filter.user_type)
+        
+        if user_filter.country_code is not None:
+            statement = statement.where(User.country_code == user_filter.country_code)
+            count_query = count_query.where(User.country_code == user_filter.country_code)
+
+        if user_filter.order_by == "created_at":
+            if user_filter.asc == "asc":
+                statement = statement.order_by(User.created_at)
+            else:
+                statement = statement.order_by(User.created_at.desc())
+        elif user_filter.order_by == "last_login":
+            if user_filter.asc == "asc":
+                statement = statement.order_by(User.last_login)
+            else:
+                statement = statement.order_by(User.last_login.desc())
+        elif user_filter.order_by == "first_name":
+            if user_filter.asc == "asc":
+                statement = statement.order_by(User.first_name)
+            else:
+                statement = statement.order_by(User.first_name.desc())
+        elif user_filter.order_by == "last_name":
+            if user_filter.asc == "asc":
+                statement = statement.order_by(User.last_name)
+            else:
+                statement = statement.order_by(User.last_name.desc())
+
+        total_count = await self.session.execute(count_query)
+        total_count = total_count.scalar_one()
+
+        statement = statement.offset((user_filter.page - 1) * user_filter.page_size).limit(
+            user_filter.page_size
+        )
         result = await self.session.execute(statement)
-        users = result.scalars().all()
-        return users
+        users = result.all()
+
+        return users, total_count
+
+    
 
     async def create(self, user_create_input, password_hash: bool = False):
         if not password_hash:
@@ -36,13 +112,32 @@ class UserService:
         user = result.scalars().first()
         return user
 
+    async def get_full_by_id(self, user_id: str):
+        statement = select(User).where(User.id == user_id).options(
+                selectinload(User.addresses),
+                selectinload(User.school_curriculum),
+                selectinload(User.professions_status)
+            )
 
+        result = await self.session.execute(statement)
+        user = result.scalars().first()
+        return user
     async def get_by_email(self, user_email: str):
         statement = select(User).where(User.email == user_email)
         result = await self.session.execute(statement)
         user = result.scalars().first()
         return user
+    
+    async def get_full_by_email(self, user_email: str):
+        statement = select(User).where(User.email == user_email).options(
+                selectinload(User.addresses),
+                selectinload(User.school_curriculum),
+                selectinload(User.professions_status)
+            )
 
+        result = await self.session.execute(statement)
+        user = result.scalars().first()
+        return user
     
     
     async def get_users_by_id_lists(self, user_ids: List[str]):
@@ -97,7 +192,7 @@ class UserService:
         await self.session.refresh(user)
         return user
 
-    async def update_profile(self, user_id: str, input: UpdateUserInput):
+    async def update_profile(self, user_id: str, input: UpdateUserProfile):
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
@@ -105,12 +200,108 @@ class UserService:
         user.first_name = input.first_name
         user.last_name = input.last_name
         user.country_code = input.country_code
+        user.birth_date = input.birth_date
+        user.civility = input.civility
+        user.mobile_number = input.mobile_number
+        user.fix_number = input.fix_number
         user.lang = input.lang
-
+        user.two_factor_enabled = input.two_factor_enabled
+        
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
         return user
+    
+    async def update_address(self, user_id: str, input: UpdateAddressInput):
+        primary_address_statement = select(Address).where(Address.address_type ==AddressTypeEnum.PRIMARY).where(Address.user_id == user_id)
+        primary_address_result = await self.session.execute(primary_address_statement)
+        primary_address = primary_address_result.scalars().one_or_none()
+        
+        if primary_address is None:
+            primary_address = Address(
+                address_type=AddressTypeEnum.PRIMARY,
+                user_id=user_id
+            )
+
+        
+        primary_address.city = input.primary_address_city
+        primary_address.country_code = input.primary_address_country_code
+        primary_address.street = input.primary_address_street
+        primary_address.postal_code = input.primary_address_postal_code
+        primary_address.state = input.primary_address_state
+
+        self.session.add(primary_address)
+        
+        
+        billing_address_statement = select(Address).where(Address.address_type ==AddressTypeEnum.BILLING).where(Address.user_id == user_id)
+        billing_address_result = await self.session.execute(billing_address_statement)
+        billing_address = billing_address_result.scalars().one_or_none()
+        
+        if billing_address is None:
+            billing_address = Address(
+                address_type=AddressTypeEnum.BILLING,
+                user_id=user_id
+            )
+
+        
+        billing_address.city = input.billing_address_city
+        billing_address.country_code = input.billing_address_country_code
+        billing_address.street = input.billing_address_street
+        billing_address.postal_code = input.billing_address_postal_code
+        billing_address.state = input.billing_address_state
+
+        self.session.add(billing_address)
+        
+        await self.session.commit()
+        
+        return primary_address, billing_address
+    
+    async def update_profession_status_input(self, user_id: str, input: UpdateProfessionStatusInput):
+        
+        Profession_status_statement = select(ProfessionStatus).where(ProfessionStatus.user_id == user_id)
+        Profession_status_result = await self.session.execute(Profession_status_statement)
+        Profession_status = Profession_status_result.scalars().one_or_none()
+        
+        if Profession_status is None:
+            Profession_status = ProfessionStatus(
+                user_id=user_id
+            )
+
+        
+        Profession_status.employer = input.employer
+        Profession_status.job_position = input.job_position
+        Profession_status.socio_professional_category = input.socio_professional_category
+        Profession_status.professional_status = input.professional_status
+        Profession_status.professional_experience_in_months = input.professional_experience_in_months
+
+        self.session.add(Profession_status)
+        
+        await self.session.commit()
+        return Profession_status
+    
+    
+    async def update_curriculum(self, user_id: str, input: UpdateCurriculumInput):
+        curriculum_statement = select(SchoolCurriculum).where(SchoolCurriculum.user_id == user_id)
+        curriculum_result = await self.session.execute(curriculum_statement)
+        curriculum = curriculum_result.scalars().one_or_none()
+        
+        if curriculum is None:
+            curriculum = SchoolCurriculum(
+                user_id=user_id
+            )
+
+        
+        curriculum.qualification = input.qualification
+        curriculum.last_degree_obtained = input.last_degree_obtained
+        curriculum.date_of_last_degree = input.date_of_last_degree
+
+
+        self.session.add(curriculum)
+        
+        
+        return curriculum
+    
+    
     
     async def update_device_id(self, user_id: str, input: UpdateDeviceInput):
         statement = select(User).where(User.id == user_id)
@@ -126,18 +317,84 @@ class UserService:
         return user
     
 
-    
-
     async def delete_user(self, user_id: str):
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
-        await self.session.delete(user)
+        user.delete_at = datetime.now(timezone.utc)
+        self.session.add(user)
         await self.session.commit()
         return user
 
+    async def assign_role(self, user_id: str, role_id: str):
 
+        statement = select(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id == role_id )
+        result = await self.session.execute(statement)
+        user_role = result.scalars().one_or_none()
+        if user_role is not None:    
+            return user_role
 
+        user_role = UserRole(user_id=user_id, role_id=role_id)
+        self.session.add(user_role)
+        await self.session.commit()
+        await self.session.refresh(user_role)
+        return {"user_id": user_id, "role_id": role_id}
+    
+    async def revoke_role(self, user_id: str, role_id: int):
+
+        statement = select(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id == role_id )
+        result = await self.session.execute(statement)
+        user_role = result.scalars().one_or_none()
+        if user_role is None:    
+            return {"user_id": user_id, "role_id": role_id}
+
+        self.session.delete(user_role)
+        await self.session.commit()
+        return  {"user_id": user_id, "role_id": role_id}
+    
+    async def assign_permissions(self, user_id: str, permission_ids: list[int]):
+        for permission_id in permission_ids:
+            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission_id )
+            result = await self.session.execute(statement)
+            user_permission = result.scalars().one_or_none()
+            if user_permission is not None:    
+                continue
+
+            user_permission = UserPermission(user_id=user_id, permission=permission_id)
+            self.session.add(user_permission)
+            await self.session.commit()
+            await self.session.refresh(user_permission)
+            
+        return {"user_id": user_id, "permission_ids": permission_ids}
+
+    async def revoke_permissions(self, user_id: str, permission_ids: list[int]):
+        for permission_id in permission_ids:
+            statement = select(UserPermission).where(UserPermission.user_id == user_id).where(UserPermission.permission == permission_id )
+            result = await self.session.execute(statement)
+            user_permission = result.scalars().one_or_none()
+            if user_permission is None:    
+                continue
+
+            self.session.delete(user_permission)
+            await self.session.commit()
+        return {"user_id": user_id, "permission_ids": permission_ids}
+    
+    async def get_all_user_permissions(self, user_id: str):
+        statement = select(UserRole.role_id).where(UserRole.user_id == user_id)
+        result = await self.session.execute(statement)
+        roles = result.scalars().all()
+        
+        
+        statement = select(UserPermission).where(
+            or_(
+                UserPermission.user_id == user_id,
+                UserPermission.role_id.in_(roles)
+                )
+        )
+        result = await self.session.execute(statement)
+        user_permissions = result.scalars().all()
+        return user_permissions
+    
     async def permission_set_up(self):
         statement = select(User).where(User.email == "admin@lafaom.com")
         result = await self.session.execute(statement)
@@ -148,12 +405,15 @@ class UserService:
                 first_name="admin",
                 last_name="admin",
                 country_code="CM",
+                birth_date=date.today(),
+                civility= CivilityEnum.MR,
                 email="admin@lafaom.com",
-                phone_number="0000000000",
-                lang="en",
+                mobile_number="0000000000",
+                fix_number="0000000000",
+                lang="fr",
                 status=UserStatusEnum.ACTIVE,
-                prefer_notification=NotificationChannel.EMAIL,
-                password=pwd_context.hash("admin")
+                password=pwd_context.hash("admin"),
+                user_type=UserTypeEnum.ADMIN
             )
             self.session.add(user)
             await self.session.commit()
@@ -168,7 +428,7 @@ class UserService:
                 role_data = Role(name=role)
                 self.session.add(role_data)
 
-            if role_data.name == RoleEnum.ADMIN:
+            if role_data.name == RoleEnum.SUPER_ADMIN.value:
                 admin = role_data
 
         await self.session.commit()

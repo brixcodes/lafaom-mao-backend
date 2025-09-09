@@ -11,7 +11,7 @@ from celery import shared_task
 
 
 push_service = FCMNotification(
-        service_account_file="src/laakam.json",
+        service_account_file="src/lafaom.json",
         credentials=None,
         project_id="laakam-487e5"
     )

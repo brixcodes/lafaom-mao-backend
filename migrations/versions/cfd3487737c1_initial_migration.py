@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: dd26f785c1c5
+Revision ID: cfd3487737c1
 Revises: 
-Create Date: 2025-07-02 10:25:50.450344
+Create Date: 2025-09-09 15:48:04.046152
 
 """
 from typing import Sequence, Union
@@ -14,7 +14,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'dd26f785c1c5'
+revision: str = 'cfd3487737c1'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -41,72 +41,45 @@ def upgrade() -> None:
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('temp_user',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
-    sa.Column('first_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('last_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('country_code', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('phone_number', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('password', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('lang', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('active', sa.Boolean(), nullable=False),
-    sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('end_time', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_table('token_data',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
-    sa.Column('token_string', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('token_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('expires_at', sa.TIMESTAMP(timezone=True), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_table('user',
+    op.create_table('users',
     sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column('first_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('last_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('country_code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('phone_number', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('birth_date', sa.Date(), nullable=True),
+    sa.Column('civility', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('country_code', sqlmodel.sql.sqltypes.AutoString(length=4), nullable=True),
+    sa.Column('mobile_number', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('fix_number', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('password', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('picture', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('picture', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('status', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('lang', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('prefer_notification', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('android_token', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('ios_token', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('web_token', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('prefer_lang_id', sa.Integer(), nullable=True),
+    sa.Column('last_login', sa.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('user_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('two_factor_enabled', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
-    op.create_index(op.f('ix_user_phone_number'), 'user', ['phone_number'], unique=True)
-    op.create_table('auth_temp_code',
-    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('end_time', sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('code')
-    )
-    op.create_table('auth_user_provider',
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_fix_number'), 'users', ['fix_number'], unique=True)
+    op.create_index(op.f('ix_users_mobile_number'), 'users', ['mobile_number'], unique=True)
+    op.create_table('addresses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
-    sa.Column('user_provider_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('provider', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('address_type', sqlmodel.sql.sqltypes.AutoString(length=15), nullable=False),
+    sa.Column('country_code', sqlmodel.sql.sqltypes.AutoString(length=4), nullable=True),
+    sa.Column('city', sqlmodel.sql.sqltypes.AutoString(length=120), nullable=True),
+    sa.Column('street', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('postal_code', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('state', sqlmodel.sql.sqltypes.AutoString(length=120), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('change_email_code',
@@ -115,11 +88,11 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('account', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('end_time', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('active', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('forgotten_password_code',
@@ -128,11 +101,50 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('account', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('end_time', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('active', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('profession_status',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('professional_status', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('professional_experience_in_months', sa.Integer(), nullable=False),
+    sa.Column('socio_professional_category', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('job_position', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('employer', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('school_curriculum',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('qualification', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('last_degree_obtained', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('date_of_last_degree', sa.Date(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('two_factor_code',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('delete_at', sa.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('end_time', sa.DateTime(), nullable=False),
+    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('user_permission',
@@ -144,14 +156,14 @@ def upgrade() -> None:
     sa.Column('role_id', sa.Integer(), nullable=False),
     sa.Column('permission', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.ForeignKeyConstraint(['role_id'], ['role.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('user_role',
     sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('role_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['role_id'], ['role.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('user_id', 'role_id')
     )
     # ### end Alembic commands ###
@@ -161,15 +173,16 @@ def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('user_role')
     op.drop_table('user_permission')
+    op.drop_table('two_factor_code')
+    op.drop_table('school_curriculum')
+    op.drop_table('profession_status')
     op.drop_table('forgotten_password_code')
     op.drop_table('change_email_code')
-    op.drop_table('auth_user_provider')
-    op.drop_table('auth_temp_code')
-    op.drop_index(op.f('ix_user_phone_number'), table_name='user')
-    op.drop_index(op.f('ix_user_email'), table_name='user')
-    op.drop_table('user')
-    op.drop_table('token_data')
-    op.drop_table('temp_user')
+    op.drop_table('addresses')
+    op.drop_index(op.f('ix_users_mobile_number'), table_name='users')
+    op.drop_index(op.f('ix_users_fix_number'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
     op.drop_table('role')
     op.drop_table('refresh_token')
     # ### end Alembic commands ###

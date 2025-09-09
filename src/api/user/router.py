@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException,status
+from fastapi import APIRouter, Depends, HTTPException, Query,status
 from typing import Annotated
 
-from fastapi.responses import JSONResponse
 from src.helper.utils import NotificationHelper
 from src.redis_client import get_from_redis, set_to_redis
 
@@ -10,20 +9,109 @@ from src.api.user.dependencies import get_user
 from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
-from src.api.user.schemas import ( UserListInput, UserListOutSuccess, UserOutSuccess,  UserUpdateInput, UsersOutSuccess)
+from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess)
 
 router = APIRouter()
 
 
-@router.get("/stats/get-user-stat",tags=["Stats"])
-async def get_user_dashboard_stat(current_user: Annotated[User, Depends(get_current_active_user)]):
+@router.post('/users/assign-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+async def assign_permissions(
+    input : AssignPermissionsInput,
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
     
-    return  {
-        "data" : {
-            
-        },
-        "message" : "Client stats fetch successfully"
-    }    
+    await user_service.assign_permissions(input)
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
+    
+    return  { "message" : "Permissions assigned successfully", "data" : user_permissions }
+    
+
+@router.post('/users/revoke-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+async def revoke_permissions(
+    input : AssignPermissionsInput,
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
+    
+    await user_service.revoke_permissions(input)
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
+    
+    return  { "message" : "Permissions revoked successfully", "data" : user_permissions }
+
+@router.post('/users/assign-roles',response_model=PermissionListOutSuccess,tags=["Users"])
+async def assign_roles(
+    input : AssignRoleInput,
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
+    
+    await user_service.assign_role(input)
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
+    
+    return  { "message" : "Roles assigned successfully", "data" : user_permissions }
+
+@router.post('/users/revoke-role',response_model=PermissionListOutSuccess,tags=["Users"])
+async def revoke_roles(
+    input : AssignRoleInput,
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
+    
+    await user_service.revoke_role(input)
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=input.user_id)
+    
+    return  { "message" : "Roles revoked successfully", "data" : user_permissions }
+
+@router.get('/users/permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+async def get_user_permissions(
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=current_user.id)
+    
+    return  { "message" : "Roles revoked successfully", "data" : user_permissions }
+
+@router.get("/users", response_model=UserListOutSuccess,tags=["Users"])
+async def read_user_list( 
+        current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
+        filter_query: Annotated[UserFilter, Query(...)],
+        user_service: UserService = Depends()
+    ):
+
+    users , counted  = await user_service.get(user_filter=filter_query)
+    return {
+        "data": users,
+        "page": filter_query.page,
+        "number": len(users),
+        "total_number": counted,
+    }
+
+@router.post("/users", response_model=UserListOutSuccess,tags=["Users"])
+async def read_user_list( 
+        user_create_input: CreateUserInput,
+        current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
+        user_service: UserService = Depends()
+    ):
+    
+    email_user = await user_service.get_by_email(user_create_input.email)
+    if email_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,            
+            detail=BaseOutFail(
+                message=ErrorMessage.EMAIL_ALREADY_TAKEN.description,
+                error_code= ErrorMessage.EMAIL_ALREADY_TAKEN.value
+            ).model_dump()
+        )
+
+    users = await user_service.create(user_create_input)
+    return  {"data" : users, "message":"Users created successfully" }
+
 @router.post("/users/internal", response_model=UserListOutSuccess,tags=["Users"])
 async def read_user_list( input: UserListInput , user_service: UserService = Depends(),claims = Depends(require_oauth_client({"user:read"}))):
 
@@ -33,15 +121,15 @@ async def read_user_list( input: UserListInput , user_service: UserService = Dep
 
 @router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
 async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
-
+    
     return  {"data" : user, "message":"Users fetch successfully" }
 
 
-@router.put("/users/{user_id}")
+@router.put("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
 async def update_user(
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
     user_id: str,
-    user_update_input: UserUpdateInput,
+    user_update_input: UpdateUserInput,
     user : Annotated[User, Depends(get_user)],
     user_service: UserService = Depends(),
 ):
@@ -55,20 +143,22 @@ async def update_user(
             ).model_dump()
         )
         
-    # user_phone = await user_service.get_by_phone(user_phone=user_update_input.phone_number)
-    # if user_phone is not None and user_phone.id != user.id:
-        
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,            
-    #         detail=BaseOutFail(
-    #             message=ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.description,   
-    #             error_code= ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.value
-    #         ).model_dump()
-    #     )
     
     user = await user_service.update(user_id, user_update_input)
     
     return  {"data" : user, "message":"Users updated successfully" }
+
+
+@router.delete("/users/{user_id}",response_model=UserOutSuccess,tags=["Users"])
+async def delete_user(
+    user_id: str,
+    user : Annotated[User, Depends(get_user)],
+    user_service: UserService = Depends(),
+):
+    user = user_service.delete_user(user_id)
+    return {"data" : user, "message":"Users updated successfully" }   
+
+
 
 
 
@@ -77,6 +167,8 @@ async def setup_users(user_service: UserService = Depends()):
     await user_service.permission_set_up()
     
     return  {"data" : "Users setup successfully" }
+
+
 
 
 @router.get('/test-get-data-to-redis',tags=["Test"])
@@ -114,12 +206,3 @@ async def test_email(email : str):
     NotificationHelper.send_smtp_email(data=data)
 
     return  {"message" : "email send" }
-
-# @router.delete("/{user_id}")
-# async def delete_user(
-#     user_id: str,
-#     user_service: UserService = Depends(),
-#     user: Mapping = Depends(get_user),
-# ):
-#     user = user_service.delete(user_id)
-#     return user    

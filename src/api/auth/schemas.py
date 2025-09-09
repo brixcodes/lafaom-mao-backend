@@ -1,8 +1,8 @@
-from typing import  Literal
+from typing import  Literal, Optional
 from pydantic import BaseModel,EmailStr
 import phonenumbers
-from  datetime import datetime
-from src.api.user.schemas import UserOut
+from  datetime import date, datetime
+from src.api.user.schemas import UserFullOut, UserOut
 
 
 
@@ -15,7 +15,7 @@ class Token(BaseModel):
 
 class UserTokenOut(BaseModel):
     access_token : Token
-    user : UserOut 
+    user : UserFullOut 
 
 class TokenData(BaseModel):
     token : str | None = None
@@ -83,11 +83,47 @@ class SocialTokenInput(BaseModel) :
     platform : Literal["ios", "android", "web"] = "web"
 
 
-
 class UpdateUserProfile(BaseModel) : 
-    first_name : str
-    last_name : str
+
+    first_name: str 
+    last_name: str 
+    birth_date: date 
+    civility : str 
+    country_code : str ="SN"
+    mobile_number : str 
+    fix_number: str 
+    two_factor_enabled : bool = False
+    lang : str = "fr"
     
+class UpdateCurriculumInput(BaseModel):
+
+    qualification : Optional[str] =""
+    last_degree_obtained : Optional[str] =""
+    date_of_last_degree :Optional[date] =""  
+
+class UpdateProfessionStatusInput(BaseModel):
+
+    professional_status : Optional[str] =""
+    professional_experience_in_months : int  = 0
+    socio_professional_category : Optional[str] ="" 
+    job_position : Optional[str] ="" 
+    employer : Optional[str] ="" 
+    
+class UpdateAddressInput(BaseModel):
+
+    primary_address_country_code: Optional[str]  =""
+    primary_address_city: Optional[str]  =""
+    primary_address_street: Optional[str]  =""
+    primary_address_postal_code: Optional[str] = "0000"
+    primary_address_state: Optional[str]  =""
+    
+    billing_address_country_code: Optional[str]  =""
+    billing_address_city: Optional[str]  =""
+    billing_address_street: Optional[str]  =""
+    billing_address_postal_code: Optional[str] = "0000"
+    billing_address_state: Optional[str]  =""
+
+
 class ClientACcessTokenInput(BaseModel) : 
     grant_type: str
     client_id: str

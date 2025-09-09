@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import Depends , HTTPException, status, APIRouter,UploadFile,File,Request,Response
 from src.api.user.models import  User
-from src.api.auth.schemas import ( ChangeEmailInput, ClientACcessTokenInput, ForgottenPasswordInput, Token,LoginInput, UpdateDeviceInput,
+from src.api.auth.schemas import ( ChangeEmailInput, ClientACcessTokenInput, ForgottenPasswordInput, Token,LoginInput, UpdateAddressInput, UpdateDeviceInput,
                                 RefreshTokenInput, UpdateUserProfile,UserTokenOut,UpdatePasswordInput,AuthCodeInput, ValidateChangeCodeInput, ValidateForgottenCodeInput)
 
 from src.api.auth.utils import (get_all_keys, get_current_active_user, make_access_token,verify_password,
@@ -11,7 +11,7 @@ from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswor
 from src.config import settings
 from src.api.user.service import UserService
 from src.api.auth.service import AuthService
-from src.api.user.schemas import  UserOutSuccess
+from src.api.user.schemas import  UserFullOutSuccess, UserOutSuccess
 from src.helper.schemas import ErrorMessage,BaseOutFail,BaseOutSuccess
 from datetime import datetime, timezone
 import re
@@ -25,7 +25,7 @@ router = APIRouter()
 async def login_for_access_token( request: Request,
     form_data: LoginInput, user_service: UserService = Depends(), token_service: AuthService = Depends()
 ) -> UserTokenOut | BaseOutSuccess:
-    user = await user_service.get_by_email(form_data.email)
+    user = await user_service.get_full_by_email(form_data.email)
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,7 +52,8 @@ async def login_for_access_token( request: Request,
 
     refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
     access_token = create_access_token(data={"sub": user.id})
-
+    
+ 
 
     return {
         "access_token": Token(
@@ -96,8 +97,7 @@ async def two_factor_token(response: Response,request: Request,
                     error_code= ErrorMessage.CODE_HAS_EXPIRED.value
                 ).model_dump()
         )
-
-    user = await user_service.get_by_id( user_id=code.user_id )
+    user = await user_service.get_full_by_id(user_id=code.user_id)
     await token_service.make_two_factor_code_used(id=code.id)
     
     refresh_token, token = await token_service.generate_refresh_token(user_id=user.id)
@@ -143,7 +143,8 @@ async def get_token_from_refresh_token(request: Request,
                 ).model_dump()
         )
 
-    user = await user_service.get_by_id( user_id=token.user_id )
+
+    user = await user_service.get_full_by_id(user_id=token.user_id )
     
     access_token = create_access_token(
         data={"sub": user.id})
@@ -344,13 +345,14 @@ async def validate_change_email_code(
         "message" : "email change successfully"
     }
 
-@router.get("/me", response_model=UserOutSuccess)
+@router.get("/me", response_model=UserFullOutSuccess)
 async def get_me(
-    current_user: Annotated[User, Depends(get_current_active_user)]
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    user_service : Annotated[UserService , Depends()],
 ):
-    
+    full_user = await user_service.get_full_by_id(user_id=current_user.id)
     return {
-        "data":current_user,
+        "data":full_user,
         "message" : "profile fetch successfully"
     }
 
@@ -368,7 +370,16 @@ async def update_profile(
         "message" : "profile updated successfully"
     }
 
-
+@router.post("/update-addresses",response_model=UserOutSuccess)
+async def update_profile(
+    current_user: Annotated[User, Depends(get_current_active_user)],update_input: UpdateAddressInput, user_service : Annotated[UserService , Depends()]
+):
+    primary_address,secondary_address = await user_service.update_address( user_id= current_user.id,input=update_input  )
+    
+    return {
+        "data":current_user,
+        "message" : "profile updated successfully"
+    }
 
 @router.post("/update-web-id",response_model=UserOutSuccess)
 async def update_profile(

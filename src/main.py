@@ -16,7 +16,7 @@ from src.helper.schemas import BaseOutFail, ErrorMessage
 # Initialize Firebase Admin SDK
 if firebase_admin._apps:
     firebase_admin.delete_app(firebase_admin.get_app())
-cred = credentials.Certificate("src/laakam.json")
+cred = credentials.Certificate("src/lafaom.json")
 firebase_admin.initialize_app(credential=cred)
 
 if settings.SENTRY_DSN and settings.ENV != "development":
