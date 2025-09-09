@@ -5,6 +5,9 @@ x-app-base: &app-base
     - .env
   volumes:
     - .:/app
+  networks:
+    - database_network
+    - redis_network
 
 
 services:
