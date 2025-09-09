@@ -62,3 +62,4 @@ aioredis==2.0.1
 itsdangerous
 certifi
 firebase_admin
+jwcrypto
