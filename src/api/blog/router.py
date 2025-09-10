@@ -1,125 +1,263 @@
-from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
+from slugify import slugify
 
-from fastapi.responses import JSONResponse
-from src.helper.utils import NotificationHelper
-from src.redis_client import get_from_redis, set_to_redis
-
-from src.api.auth.utils import  check_permissions, get_current_active_user, require_oauth_client
-from src.api.user.dependencies import get_user
+from src.api.auth.utils import check_permissions
 from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
-from src.api.user.service import UserService
-from src.api.user.schemas import ( UserListInput, UserListOutSuccess, UserOutSuccess,  UserUpdateInput, UsersOutSuccess)
 
-router = APIRouter()
-
-
-@router.get("/stats/get-user-stat",tags=["Stats"])
-async def get_user_dashboard_stat(current_user: Annotated[User, Depends(get_current_active_user)]):
-    
-    return  {
-        "data" : {
-            
-        },
-        "message" : "Client stats fetch successfully"
-    }    
-@router.post("/users/internal", response_model=UserListOutSuccess,tags=["Users"])
-async def read_user_list( input: UserListInput , user_service: UserService = Depends(),claims = Depends(require_oauth_client({"user:read"}))):
-
-    users = await user_service.get_users_by_id_lists(user_ids=input.user_ids)
-    return  {"data" : users, "message":"Users list fetch successfully" }
+from src.api.blog.service import BlogService
+from src.api.blog.schemas import (
+    PostCategoryCreateInput,
+    PostCategoryUpdateInput,
+    PostCategoryOutSuccess,
+    PostCategoryListOutSuccess,
+    PostCreateInput,
+    PostUpdateInput,
+    PostOutSuccess,
+    PostsPageOutSuccess,
+    PostFilter,
+    PostSectionCreateInput,
+    PostSectionUpdateInput,
+    PostSectionOutSuccess,
+    PostSectionListOutSuccess,
+)
+from src.api.blog.dependencies import get_category, get_post, get_post_by_slug, get_section
 
 
-@router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
-async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
-
-    return  {"data" : user, "message":"Users fetch successfully" }
+router = APIRouter(tags=["Blog"])
 
 
-@router.put("/users/{user_id}")
-async def update_user(
-    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
-    user_id: str,
-    user_update_input: UserUpdateInput,
-    user : Annotated[User, Depends(get_user)],
-    user_service: UserService = Depends(),
+# Categories
+@router.get("/blog/categories", response_model=PostCategoryListOutSuccess,tags=["Post Category"])
+async def list_categories(
+    blog_service: BlogService = Depends(),
 ):
-    user_email = await user_service.get_by_email(user_email=user_update_input.email)
-    if user_email is not None and user_email.id != user.id:
+    categories = await blog_service.list_categories()
+    return {"message": "Categories fetched successfully", "data": categories}
+
+
+@router.post("/blog/categories", response_model=PostCategoryOutSuccess,tags=["Post Category"])
+async def create_category(
+    input: PostCategoryCreateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_BLOG]))],
+    blog_service: BlogService = Depends(),
+):
+    slug = slugify(input.title)
+    existing = await blog_service.get_category_by_slug(slug)
+    if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,            
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message=ErrorMessage.EMAIL_ALREADY_TAKEN.description,
-                error_code= ErrorMessage.EMAIL_ALREADY_TAKEN.value
-            ).model_dump()
+                message="Category slug already exists",
+                error_code="category_slug_taken",
+            ).model_dump(),
         )
+    category = await blog_service.create_category(input)
+    return {"message": "Category created successfully", "data": category}
+
+
+@router.put("/blog/categories/{category_id}", response_model=PostCategoryOutSuccess,tags=["Post Category"])
+async def update_category(
+    category_id: int,
+    input: PostCategoryUpdateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_BLOG]))],
+    category=Depends(get_category),
+    blog_service: BlogService = Depends(),
+):
+    if input.title:
+        slug = slugify(input.title)
+        existing = await blog_service.get_category_by_slug(slug)
+        if existing is not None and existing.id != category.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.CATEGORY_ALREADY_EXISTS.description,
+                    error_code=ErrorMessage.CATEGORY_ALREADY_EXISTS.value,
+                ).model_dump(),
+            )
+    category = await blog_service.update_category(category, input)
+    return {"message": "Category updated successfully", "data": category}
+
+
+@router.delete("/blog/categories/{category_id}", response_model=PostCategoryOutSuccess,tags=["Post Category"])
+async def delete_category(
+    category_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_BLOG]))],
+    category=Depends(get_category),
+    blog_service: BlogService = Depends(),
+):
+    category = await blog_service.delete_category(category)
+    return {"message": "Category deleted successfully", "data": category}
+
+
+# Posts
+@router.get("/blog/posts", response_model=PostsPageOutSuccess,tags=["Post"])
+async def list_posts(
+    filters: Annotated[PostFilter, Query(...)],
+    blog_service: BlogService = Depends(),
+):
+    posts, total = await blog_service.list_posts(filters)
+    return {"data": posts, "page": filters.page, "number": len(posts), "total_number": total}
+
+@router.get("/blog/get-published-posts", response_model=PostsPageOutSuccess,tags=["Post"])
+async def list_posts(
+    filters: Annotated[PostFilter, Query(...)],
+    blog_service: BlogService = Depends(),
+):
+    posts, total = await blog_service.list_posts(filters,True)
+    return {"data": posts, "page": filters.page, "number": len(posts), "total_number": total}
+
+@router.post("/blog/posts", response_model=PostOutSuccess,tags=["Post"])
+async def create_post(
+    input: Annotated[PostCreateInput, Form(...)],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_BLOG]))],
+    blog_service: BlogService = Depends(),
+):  
+    slug = slugify(input.title)
+    existing = await blog_service.get_post_by_slug(slug)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.POST_ALREADY_EXISTS.description,
+                error_code=ErrorMessage.POST_ALREADY_EXISTS.value,
+            ).model_dump(),
+        )
+    post = await blog_service.create_post(data=input, user_id=current_user.id)
+    return {"message": "Post created successfully", "data": post}
+
+
+@router.get("/blog/posts/{post_id}", response_model=PostOutSuccess,tags=["Post"])
+async def get_post_route(
+    post_id: int,
+    blog_service: BlogService = Depends(),
+):
+    post = await blog_service.get_full_post_by_id(post_id)
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.POST_NOT_FOUND.description,
+                error_code=ErrorMessage.POST_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    return {"message": "Post fetched successfully", "data": post}
+
+@router.get("/blog/posts-by-slug/{post_slug}", response_model=PostOutSuccess,tags=["Post"])
+async def get_post_route(
+    post_slug: str,
+    blog_service: BlogService = Depends(),
+):
+    post = await blog_service.get_full_post_by_slug(post_slug)
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.POST_NOT_FOUND.description,
+                error_code=ErrorMessage.POST_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    return {"message": "Post fetched successfully", "data": post}
+
+@router.put("/blog/posts/{post_id}", response_model=PostOutSuccess,tags=["Post"])
+async def update_post_route(
+    post_id: int,
+    input: Annotated[PostUpdateInput, Form(...)],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_BLOG]))],
+    post=Depends(get_post),
+    blog_service: BlogService = Depends(),
+):  
+    if input.title != None :
+        slug = slugify(input.title)
+        existing = await blog_service.get_post_by_slug(slug)
+        if existing is not None and existing.id != post_id :
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.POST_ALREADY_EXISTS.description,
+                    error_code=ErrorMessage.POST_ALREADY_EXISTS.value,
+                ).model_dump(),
+            )
         
-    # user_phone = await user_service.get_by_phone(user_phone=user_update_input.phone_number)
-    # if user_phone is not None and user_phone.id != user.id:
-        
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,            
-    #         detail=BaseOutFail(
-    #             message=ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.description,   
-    #             error_code= ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.value
-    #         ).model_dump()
-    #     )
-    
-    user = await user_service.update(user_id, user_update_input)
-    
-    return  {"data" : user, "message":"Users updated successfully" }
+    post = await blog_service.update_post(post=post, data=input)
+    return {"message": "Post updated successfully", "data": post}
 
 
+@router.delete("/blog/posts/{post_id}", response_model=PostOutSuccess,tags=["Post"])
+async def delete_post_route(
+    post_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_BLOG]))],
+    post=Depends(get_post),
+    blog_service: BlogService = Depends(),
+):
+    post = await blog_service.delete_post(post)
+    return {"message": "Post deleted successfully", "data": post}
 
-@router.get('/setup-users',tags=["Users"])
-async def setup_users(user_service: UserService = Depends()):
-    await user_service.permission_set_up()
-    
-    return  {"data" : "Users setup successfully" }
+
+# Sections
+@router.get("/blog/posts/{post_id}/sections", response_model=PostSectionListOutSuccess,tags=["Post Section"])
+async def list_sections(
+    post_id: int,
+    post=Depends(get_post),
+    blog_service: BlogService = Depends(),
+):
+    sections = await blog_service.list_sections_by_post(post_id)
+    return {"message": "Sections fetched successfully", "data": sections}
 
 
-@router.get('/test-get-data-to-redis',tags=["Test"])
-async def get_data_redis(test_number : int):
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
+@router.get("/blog/posts-by-slug/{post_slug}/sections", response_model=PostSectionListOutSuccess,tags=["Post Section"])
+async def list_sections(
+    post_slug: str,
+    post=Depends(get_post_by_slug),
+    blog_service: BlogService = Depends(),
+):
+    sections = await blog_service.get_section_by_post_slug(post_slug)
+    return {"message": "Sections fetched successfully", "data": sections}
 
-    return  {"message" : "no data" }
-    
-@router.get('/test-add-data-to-redis',tags=["Test"])
-async def add_data_redis(test_number : int):
-    await set_to_redis(
-                        f"test:{test_number}", f"test:{test_number}", ex=60
-                    ) 
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
+@router.post("/blog/sections", response_model=PostSectionOutSuccess,tags=["Post Section"])
+async def create_section(
+    input: Annotated[PostSectionCreateInput, Form(...)],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_BLOG]))],
+    blog_service: BlogService = Depends(),
+):
+    section = await blog_service.create_section(input)
+    return {"message": "Section created successfully", "data": section}
 
-    return  {"message" : "npo data found after add" }
 
-@router.get('/test-send-email',tags=["Test"])
-async def test_email(email : str):
-    
-    data = {
-            "to_email" : email,
-            "subject":"Email Validation",
-            "template_name":"verify_email.html" ,
-            "lang":"en",
-            "context":{
-                    "code":"AZERTY",
-                    "time": 30
-                } 
-        } 
-    NotificationHelper.send_smtp_email(data=data)
+@router.put("/blog/sections/{section_id}", response_model=PostSectionOutSuccess,tags=["Post Section"])
+async def update_section(
+    section_id: int,
+    input: Annotated[PostSectionUpdateInput, Form(...)],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_BLOG]))],
+    section=Depends(get_section),
+    blog_service: BlogService = Depends(),
+):
+    section = await blog_service.update_section(section, input)
+    return {"message": "Section updated successfully", "data": section}
 
-    return  {"message" : "email send" }
 
-# @router.delete("/{user_id}")
-# async def delete_user(
-#     user_id: str,
-#     user_service: UserService = Depends(),
-#     user: Mapping = Depends(get_user),
-# ):
-#     user = user_service.delete(user_id)
-#     return user    
+@router.delete("/blog/sections/{section_id}", response_model=PostSectionOutSuccess,tags=["Post Section"])
+async def delete_section(
+    section_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_BLOG]))],
+    section=Depends(get_section),
+    blog_service: BlogService = Depends(),
+):
+    section = await blog_service.delete_section(section)
+    return {"message": "Section deleted successfully", "data": section}
+
+
+# Publish Post
+@router.post("/blog/posts/{post_id}/publish", response_model=PostOutSuccess,tags=["Post"])
+async def publish_post_route(
+    post_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_PUBLISH_BLOG]))],
+    post=Depends(get_post),
+    blog_service: BlogService = Depends(),
+):
+    post = await blog_service.publish_post(post)
+    post = await blog_service.get_full_post_by_id(post.id)
+    return {"message": "Post published successfully", "data": post}
+
+

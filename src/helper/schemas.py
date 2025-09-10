@@ -110,9 +110,7 @@ class ErrorMessage(Enum):
     FAILED_TO_OBTAIN_TOKEN = ('failed_to_obtain_token',"Failed to obtain token")
     EMAIL_OR_PHONE_NUMBER_REQUIRED = ('email_or_phone_number_required',"Email or phone number required")
     
-    PROVIDER_NOT_FOUND = ("provider_not_found", "Provider not found")
-    
-    CHANNEL_NOT_FOUND = ("channel_not_found", "Channel not found")
+
     USER_NOT_FOUND = ("user_not_found", "User not found")
 
 
@@ -125,10 +123,8 @@ class ErrorMessage(Enum):
     INCORRECT_EMAIL_OR_PASSWORD = ('in_correct_email_or_password',"Incorrect email or password")
     EMAIL_ALREADY_TAKEN = ('email_already_token',"Email already taken")
     EMAIL_NOT_FOUND = ('email_not_found',"User email not found")
-    PHONE_NUMBER_NOT_SUPPORTED = ('phone_number_not_supported',"Phone number not yet supported")
     PASSWORD_NOT_CORRECT = ('password_not_correct',"The password is not correct")
 
-    PHONE_NUMBER_ALREADY_TAKEN = ('phone_number_already_token',"Phone number already taken")
     
     REFRESH_TOKEN_NOT_FOUND = ('refresh_token_not_found',"Refresh token not found")
     REFRESH_TOKEN_HAS_EXPIRED = ('refresh_token_has_expired',"Refresh token has expired")
@@ -138,8 +134,14 @@ class ErrorMessage(Enum):
 
     ACCESS_DENIED = ('access_denied',"Access denied")
     SERVER_ERROR = ('server_error',"Server error")
-    PROVIDER_NOT_SUPPORTED = ('provider_not_supported',"Provider not supported")     
-
+    PROVIDER_NOT_SUPPORTED = ('provider_not_supported',"Provider not supported")   
+    
+    CATEGORY_NOT_FOUND = ('category_not_found',"Category not found")
+    CATEGORY_ALREADY_EXISTS = ('category_already_exists',"Category already exists")
+    POST_NOT_FOUND = ('post_not_found',"Post not found")
+    POST_SECTION_NOT_FOUND = ('post_section_not_found',"Post section not found")
+    POST_ALREADY_EXISTS = ('post_already_exists',"Post already exists")
+    
     
     def __str__(self):
         return self.value   

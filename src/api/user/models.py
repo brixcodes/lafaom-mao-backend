@@ -51,6 +51,14 @@ class PermissionEnum(str, Enum):
     CAN_GIVE_ROLE = "can_give_role"
     CAN_GIVE_PERMISSION = "can_give_permission"
     
+    CAN_VIEW_BLOG = "can_view_blog"
+    CAN_CREATE_BLOG = "can_create_blog"
+    CAN_UPDATE_BLOG = "can_update_blog"
+    CAN_DELETE_BLOG = "can_delete_blog"
+    CAN_PUBLISH_BLOG = "can_publish_blog"
+    
+    
+    
 """
     CAN_VIEW_PERMISSION = "can_view_permission"
     CAN_CREATE_PERMISSION = "can_create_permission"
