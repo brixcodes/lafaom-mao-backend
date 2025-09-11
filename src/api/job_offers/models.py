@@ -5,7 +5,7 @@ from src.helper.model import CustomBaseUUIDModel,CustomBaseModel
 from typing import List, Optional
 from enum import Enum
 from  datetime import datetime
-from sqlalchemy import JSON
+from sqlalchemy import JSON, TIMESTAMP
 
 
 class ApplicationStatusEnum(str, Enum):
@@ -62,10 +62,9 @@ class JobApplication(CustomBaseModel, table=True):
     last_name : str
     civility : str | None = Field(nullable=True)
     country_code : str | None = Field(nullable=True)
-    date_of_birth = Optional[date]
+    date_of_birth : Optional[date] = Field(nullable=True)
     
     job_offer: JobOffer = Relationship()
-    
     
     attachments: List["JobAttachment"] = Relationship( sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
@@ -77,4 +76,14 @@ class JobAttachment(CustomBaseModel, table=True):
     document_type: str = Field( max_length=100)
     file_path: str = Field(max_length=255)
     upload_date: Optional[datetime] = Field(default=None)
+
+
+class JobApplicationCode(CustomBaseModel, table=True):
+    __tablename__ = "job_application_codes"
+    
+    application_id: int = Field(foreign_key="job_applications.id", nullable=False)
+    email: str = Field(nullable=False)
+    code: str = Field(nullable=False)
+    end_time: datetime = Field(sa_type=TIMESTAMP(timezone=True), nullable=False)
+    active: bool = Field(default=True)
 

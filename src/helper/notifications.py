@@ -149,5 +149,51 @@ class WelcomeNotification(NotificationBase) :
             "lang":self.lang,
             "context":{
                 } 
+        }
+
+
+class JobApplicationConfirmationNotification(NotificationBase) :
+
+    subject : str = "Job Application Confirmation"
+    email_template : str = "job_application_confirmation.html"
+    application_number : str = ""
+    job_title : str = ""
+    candidate_name : str = ""
+    
+    def email_data(self) -> dict :
+        return{
+            "to_email" :self.email,
+            "subject":self.subject,
+            "template_name":self.email_template ,
+            "lang":self.lang,
+            "context":{
+                    "application_number":self.application_number,
+                    "job_title":self.job_title,
+                    "candidate_name":self.candidate_name
+                } 
+        }
+
+
+class JobApplicationOTPNotification(NotificationBase) :
+
+    subject : str = "Job Application Update Code"
+    email_template : str = "job_application_otp.html"
+    code : str = ""
+    time : int = 30
+    application_number : str = ""
+    candidate_name : str = ""
+    
+    def email_data(self) -> dict :
+        return{
+            "to_email" :self.email,
+            "subject":self.subject,
+            "template_name":self.email_template ,
+            "lang":self.lang,
+            "context":{
+                    "code":self.code,
+                    "time":self.time,
+                    "application_number":self.application_number,
+                    "candidate_name":self.candidate_name
+                } 
         } 
         

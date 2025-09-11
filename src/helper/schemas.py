@@ -142,6 +142,19 @@ class ErrorMessage(Enum):
     POST_SECTION_NOT_FOUND = ('post_section_not_found',"Post section not found")
     POST_ALREADY_EXISTS = ('post_already_exists',"Post already exists")
     
+    # Job Offer Errors
+    JOB_OFFER_NOT_FOUND = ('job_offer_not_found',"Job offer not found")
+    JOB_OFFER_REFERENCE_TAKEN = ('job_offer_reference_taken',"Job offer reference already exists")
+    
+    # Job Application Errors
+    JOB_APPLICATION_NOT_FOUND = ('job_application_not_found',"Job application not found")
+    
+    # Job Attachment Errors
+    JOB_ATTACHMENT_NOT_FOUND = ('job_attachment_not_found',"Job attachment not found")
+    
+    # OTP Errors
+    INVALID_OTP_OR_APPLICATION_NOT_FOUND = ('invalid_otp_or_application_not_found',"Invalid OTP code or application not found")
+    
     
     def __str__(self):
         return self.value   

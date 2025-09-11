@@ -1,125 +1,241 @@
-from fastapi import APIRouter, Depends, HTTPException,status
 from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from fastapi.responses import JSONResponse
-from src.helper.utils import NotificationHelper
-from src.redis_client import get_from_redis, set_to_redis
-
-from src.api.auth.utils import  check_permissions, get_current_active_user, require_oauth_client
-from src.api.user.dependencies import get_user
+from src.api.auth.utils import check_permissions
 from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
-from src.api.user.service import UserService
-from src.api.user.schemas import ( UserListInput, UserListOutSuccess, UserOutSuccess,  UserUpdateInput, UsersOutSuccess)
 
-router = APIRouter()
-
-
-@router.get("/stats/get-user-stat",tags=["Stats"])
-async def get_user_dashboard_stat(current_user: Annotated[User, Depends(get_current_active_user)]):
-    
-    return  {
-        "data" : {
-            
-        },
-        "message" : "Client stats fetch successfully"
-    }    
-@router.post("/users/internal", response_model=UserListOutSuccess,tags=["Users"])
-async def read_user_list( input: UserListInput , user_service: UserService = Depends(),claims = Depends(require_oauth_client({"user:read"}))):
-
-    users = await user_service.get_users_by_id_lists(user_ids=input.user_ids)
-    return  {"data" : users, "message":"Users list fetch successfully" }
-
-
-@router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
-async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
-
-    return  {"data" : user, "message":"Users fetch successfully" }
+from src.api.job_offers.service import JobOfferService
+from src.api.job_offers.schemas import (
+    JobOfferCreateInput,
+    JobOfferUpdateInput,
+    JobOfferOutSuccess,
+    JobOffersPageOutSuccess,
+    JobOfferFilter,
+    JobApplicationCreateInput,
+    JobApplicationUpdateInput,
+    JobApplicationUpdateByCandidateInput,
+    JobApplicationOTPRequestInput,
+    JobApplicationOutSuccess,
+    JobApplicationsPageOutSuccess,
+    JobApplicationFilter,
+    JobAttachmentOutSuccess,
+    JobAttachmentListOutSuccess,
+)
+from src.api.job_offers.dependencies import get_job_offer, get_job_application, get_job_attachment
 
 
-@router.put("/users/{user_id}")
-async def update_user(
-    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
-    user_id: str,
-    user_update_input: UserUpdateInput,
-    user : Annotated[User, Depends(get_user)],
-    user_service: UserService = Depends(),
+router = APIRouter(tags=["Job Offers"])
+
+
+# Job Offers
+@router.get("/job-offers", response_model=JobOffersPageOutSuccess, tags=["Job Offer"])
+async def list_job_offers(
+    filters: Annotated[JobOfferFilter, Query(...)],
+    job_offer_service: JobOfferService = Depends(),
 ):
-    user_email = await user_service.get_by_email(user_email=user_update_input.email)
-    if user_email is not None and user_email.id != user.id:
+    job_offers, total = await job_offer_service.list_job_offers(filters)
+    return {"data": job_offers, "page": filters.page, "number": len(job_offers), "total_number": total}
+
+
+@router.post("/job-offers", response_model=JobOfferOutSuccess, tags=["Job Offer"])
+async def create_job_offer(
+    input: JobOfferCreateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_JOB_OFFER]))],
+    job_offer_service: JobOfferService = Depends(),
+):
+    existing = await job_offer_service.get_job_offer_by_reference(input.reference)
+    if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,            
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message=ErrorMessage.EMAIL_ALREADY_TAKEN.description,
-                error_code= ErrorMessage.EMAIL_ALREADY_TAKEN.value
-            ).model_dump()
+                message=ErrorMessage.JOB_OFFER_REFERENCE_TAKEN.description,
+                error_code=ErrorMessage.JOB_OFFER_REFERENCE_TAKEN.value,
+            ).model_dump(),
         )
-        
-    # user_phone = await user_service.get_by_phone(user_phone=user_update_input.phone_number)
-    # if user_phone is not None and user_phone.id != user.id:
-        
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,            
-    #         detail=BaseOutFail(
-    #             message=ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.description,   
-    #             error_code= ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.value
-    #         ).model_dump()
-    #     )
+    job_offer = await job_offer_service.create_job_offer(input)
+    return {"message": "Job offer created successfully", "data": job_offer}
+
+
+@router.get("/job-offers/{job_offer_id}", response_model=JobOfferOutSuccess, tags=["Job Offer"])
+async def get_job_offer_route(
+    job_offer_id: str,
+    job_offer=Depends(get_job_offer),
+):
+    return {"message": "Job offer fetched successfully", "data": job_offer}
+
+
+@router.put("/job-offers/{job_offer_id}", response_model=JobOfferOutSuccess, tags=["Job Offer"])
+async def update_job_offer_route(
+    job_offer_id: str,
+    input: JobOfferUpdateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_JOB_OFFER]))],
+    job_offer=Depends(get_job_offer),
+    job_offer_service: JobOfferService = Depends(),
+):
+    if input.reference:
+        existing = await job_offer_service.get_job_offer_by_reference(input.reference)
+        if existing is not None and existing.id != job_offer_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.JOB_OFFER_REFERENCE_TAKEN.description,
+                    error_code=ErrorMessage.JOB_OFFER_REFERENCE_TAKEN.value,
+                ).model_dump(),
+            )
+    job_offer = await job_offer_service.update_job_offer(job_offer, input)
+    return {"message": "Job offer updated successfully", "data": job_offer}
+
+
+@router.delete("/job-offers/{job_offer_id}", response_model=JobOfferOutSuccess, tags=["Job Offer"])
+async def delete_job_offer_route(
+    job_offer_id: str,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_JOB_OFFER]))],
+    job_offer=Depends(get_job_offer),
+    job_offer_service: JobOfferService = Depends(),
+):
+    job_offer = await job_offer_service.delete_job_offer(job_offer)
+    return {"message": "Job offer deleted successfully", "data": job_offer}
+
+
+# Job Applications
+@router.get("/job-applications", response_model=JobApplicationsPageOutSuccess, tags=["Job Application"])
+async def list_job_applications(
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_JOB_APPLICATION]))],
+    filters: Annotated[JobApplicationFilter, Query(...)],
+    job_offer_service: JobOfferService = Depends(),
+):
+    applications, total = await job_offer_service.list_job_applications(filters)
+    return {"data": applications, "page": filters.page, "number": len(applications), "total_number": total}
+
+
+@router.post("/job-applications", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+async def create_job_application(
+    input: JobApplicationCreateInput,
+    job_offer_service: JobOfferService = Depends(),
+):
+    # Verify job offer exists
+    job_offer = await job_offer_service.get_job_offer_by_id(input.job_offer_id)
+    if job_offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.JOB_OFFER_NOT_FOUND.description,
+                error_code=ErrorMessage.JOB_OFFER_NOT_FOUND.value,
+            ).model_dump(),
+        )
     
-    user = await user_service.update(user_id, user_update_input)
+    application = await job_offer_service.create_job_application(input)
+    return {"message": "Job application created successfully", "data": application}
+
+
+@router.get("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+async def get_job_application_route(
+    application_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_JOB_APPLICATION]))],
+    job_offer_service: JobOfferService = Depends(),
+):
+    full_application = await job_offer_service.get_full_job_application_by_id(application_id)
+    if full_application is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.JOB_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.JOB_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    return {"message": "Job application fetched successfully", "data": full_application}
+
+
+@router.put("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+async def update_job_application_route(
+    application_id: int,
+    input: JobApplicationUpdateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_JOB_APPLICATION]))],
+    application=Depends(get_job_application),
+    job_offer_service: JobOfferService = Depends(),
+):
+    application = await job_offer_service.update_job_application(application, input)
+    return {"message": "Job application updated successfully", "data": application}
+
+
+@router.delete("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+async def delete_job_application_route(
+    application_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_JOB_APPLICATION]))],
+    application=Depends(get_job_application),
+    job_offer_service: JobOfferService = Depends(),
+):
+    application = await job_offer_service.delete_job_application(application)
+    return {"message": "Job application deleted successfully", "data": application}
+
+
+# Job Attachments
+@router.get("/job-applications/{application_id}/attachments", response_model=JobAttachmentListOutSuccess, tags=["Job Attachment"])
+async def list_attachments(
+    application_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_JOB_APPLICATION]))],
+    application=Depends(get_job_application),
+    job_offer_service: JobOfferService = Depends(),
+):
+    attachments = await job_offer_service.list_attachments_by_application(application_id)
+    return {"message": "Attachments fetched successfully", "data": attachments}
+
+
+@router.delete("/job-attachments/{attachment_id}", response_model=JobAttachmentOutSuccess, tags=["Job Attachment"])
+async def delete_attachment(
+    attachment_id: int,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_JOB_APPLICATION]))],
+    attachment=Depends(get_job_attachment),
+    job_offer_service: JobOfferService = Depends(),
+):
+    attachment = await job_offer_service.delete_job_attachment(attachment)
+    return {"message": "Attachment deleted successfully", "data": attachment}
+
+
+# OTP Endpoints for Job Applications
+@router.post("/job-applications/request-otp", tags=["Job Application OTP"])
+async def request_application_otp(
+    input: JobApplicationOTPRequestInput,
+    job_offer_service: JobOfferService = Depends(),
+):
+    """Request OTP code to update job application"""
+    code = await job_offer_service.generate_application_otp(input.application_number, input.email)
+    if code is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.JOB_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.JOB_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
     
-    return  {"data" : user, "message":"Users updated successfully" }
+    # OTP code has been sent via email
+    return {"message": "OTP code sent to your email address", "data": {}}
 
 
-
-@router.get('/setup-users',tags=["Users"])
-async def setup_users(user_service: UserService = Depends()):
-    await user_service.permission_set_up()
+@router.put("/job-applications/update-by-candidate", response_model=JobApplicationOutSuccess, tags=["Job Application OTP"])
+async def update_application_by_candidate(
+    input: JobApplicationUpdateByCandidateInput,
+    job_offer_service: JobOfferService = Depends(),
+):
+    """Update job application by candidate using OTP verification"""
+    # Verify OTP and get application
+    # We need to get application_number from somewhere - let's add it to the input schema
+    # For now, let's assume it's passed in the input
+    application = await job_offer_service.verify_application_otp(
+        input.application_number, input.email, input.otp_code
+    )
     
-    return  {"data" : "Users setup successfully" }
-
-
-@router.get('/test-get-data-to-redis',tags=["Test"])
-async def get_data_redis(test_number : int):
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
-
-    return  {"message" : "no data" }
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.INVALID_OTP_OR_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.INVALID_OTP_OR_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
     
-@router.get('/test-add-data-to-redis',tags=["Test"])
-async def add_data_redis(test_number : int):
-    await set_to_redis(
-                        f"test:{test_number}", f"test:{test_number}", ex=60
-                    ) 
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
-
-    return  {"message" : "npo data found after add" }
-
-@router.get('/test-send-email',tags=["Test"])
-async def test_email(email : str):
-    
-    data = {
-            "to_email" : email,
-            "subject":"Email Validation",
-            "template_name":"verify_email.html" ,
-            "lang":"en",
-            "context":{
-                    "code":"AZERTY",
-                    "time": 30
-                } 
-        } 
-    NotificationHelper.send_smtp_email(data=data)
-
-    return  {"message" : "email send" }
-
-# @router.delete("/{user_id}")
-# async def delete_user(
-#     user_id: str,
-#     user_service: UserService = Depends(),
-#     user: Mapping = Depends(get_user),
-# ):
-#     user = user_service.delete(user_id)
-#     return user    
+    # Update application
+    updated_application = await job_offer_service.update_application_by_candidate(application, input)
+    return {"message": "Application updated successfully", "data": updated_application}

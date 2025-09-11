@@ -1,82 +1,189 @@
-from pydantic import BaseModel,Field
-from typing import List,Optional,Literal
-from datetime import datetime
-from src.helper.schemas import BaseOutSuccess
+from datetime import date, datetime
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
+from src.helper.schemas import BaseOutPage, BaseOutSuccess
+from src.api.job_offers.models import ApplicationStatusEnum
 
 
+class JobOfferCreateInput(BaseModel):
+    reference: str
+    title: str
+    location: str
+    postal_code: str
+    contract_type: str
+    uncertain_term: bool = False
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    weekly_hours: Optional[int] = None
+    driving_license_required: bool = False
+    submission_deadline: date
+    main_mission: Optional[str] = None
+    responsibilities: Optional[str] = None
+    competencies: Optional[str] = None
+    profile: Optional[str] = None
+    salary: Optional[float] = None
+    benefits: Optional[str] = None
+    submission_fee: float
+    currency: str = "EUR"
+    attachment: Optional[List[str]] = None
+    conditions: Optional[str] = None
 
-class UserCreateInput(BaseModel):
-    name: str
+
+class JobOfferUpdateInput(BaseModel):
+    reference: Optional[str] = None
+    title: Optional[str] = None
+    location: Optional[str] = None
+    postal_code: Optional[str] = None
+    contract_type: Optional[str] = None
+    uncertain_term: Optional[bool] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    weekly_hours: Optional[int] = None
+    driving_license_required: Optional[bool] = None
+    submission_deadline: Optional[date] = None
+    main_mission: Optional[str] = None
+    responsibilities: Optional[str] = None
+    competencies: Optional[str] = None
+    profile: Optional[str] = None
+    salary: Optional[float] = None
+    benefits: Optional[str] = None
+    submission_fee: Optional[float] = None
+    currency: Optional[str] = None
+    attachment: Optional[List[str]] = None
+    conditions: Optional[str] = None
+
+
+class JobOfferOut(BaseModel):
+    id: str
+    reference: str
+    title: str
+    location: str
+    postal_code: str
+    contract_type: str
+    uncertain_term: bool
+    start_date: Optional[date]
+    end_date: Optional[date]
+    weekly_hours: Optional[int]
+    driving_license_required: bool
+    submission_deadline: date
+    main_mission: Optional[str]
+    responsibilities: Optional[str]
+    competencies: Optional[str]
+    profile: Optional[str]
+    salary: Optional[float]
+    benefits: Optional[str]
+    submission_fee: float
+    currency: str
+    attachment: Optional[List[str]]
+    conditions: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobOfferFilter(BaseModel):
+    page: int = Field(1, ge=1)
+    page_size: int = Field(20, ge=1)
+    search: Optional[str] = None
+    location: Optional[str] = None
+    contract_type: Optional[str] = None
+    salary_min: Optional[float] = None
+    salary_max: Optional[float] = None
+    order_by: Literal["created_at", "submission_deadline", "title", "salary"] = "created_at"
+    asc: Literal["asc", "desc"] = "asc"
+
+
+class JobApplicationCreateInput(BaseModel):
+    job_offer_id: str
     email: str
-    password: str
-    
-
-class  AccountInput(BaseModel):
-    account : str   
-
-
-
-
-class ListDataInput(BaseModel):
-
-    data : List[int]
-    
-
-class UserUpdateInput(UserCreateInput):
-    pass
+    phone_number: str
+    first_name: str
+    last_name: str
+    civility: Optional[str] = None
+    country_code: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    submission_fee: float
 
 
-    
-class UserOut(BaseModel):
-    id : str
-    first_name: str 
-    last_name: str 
-    country_code: str 
+class JobApplicationUpdateInput(BaseModel):
+    status: Optional[str] = None
+    refusal_reason: Optional[str] = None
+
+
+class JobApplicationUpdateByCandidateInput(BaseModel):
+    application_number: str
+    email: str
     phone_number: Optional[str] = None
-    email: Optional[str] = None
-    address : Optional[str] = None
-    picture :  Optional[str] = None 
-    status : str 
-    lang : str 
-    created_at : datetime
-    updated_at : datetime
-    prefer_notification : str 
-    
-
-class UserListInput(BaseModel):
-    user_ids : List[str]
-
-class UserSimpleOut(BaseModel):
-    id : str
-    first_name: str 
-    last_name: str 
-    phone_number: Optional[str] = None
-    email: Optional[str] = None
-    status : str 
-    lang : str 
-    created_at : datetime
-    
-
-class UserOutSuccess(BaseOutSuccess):
-    
-    data: UserOut 
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    civility: Optional[str] = None
+    country_code: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    otp_code: str
 
 
-class UsersOutSuccess(BaseOutSuccess):
-    
-    data: List [UserOut]    
-    
-class UserListOutSuccess(BaseOutSuccess):
-    
-    data: List [UserOut]  
-    
-class FreelancerFilterParams(BaseModel):
-    page: int | None = Field(1, ge=1)
-    category : str = "all"
-    location : str  = "all"
-    skills: list[int]  =  []
-    diplomas: list[str]  =  []
-    certificates: list[int]  =  []
-    languages: list[int]  =  []
-    order_by:  Literal["created_at", "pricing"] = "created_at"
-    asc :  Literal["asc", "desc"] = "asc"
+class JobApplicationOTPRequestInput(BaseModel):
+    application_number: str
+    email: str
+
+
+class JobAttachmentOut(BaseModel):
+    id: int
+    application_id: int
+    document_type: str
+    file_path: str
+    upload_date: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobApplicationOut(BaseModel):
+    id: int
+    job_offer_id: str
+    application_number: str
+    status: str
+    refusal_reason: Optional[str]
+    submission_fee: float
+    email: str
+    phone_number: str
+    first_name: str
+    last_name: str
+    civility: Optional[str]
+    country_code: Optional[str]
+    date_of_birth: Optional[date]
+    created_at: datetime
+    updated_at: datetime
+    attachments: List[JobAttachmentOut] = []
+
+
+class JobApplicationFilter(BaseModel):
+    page: int = Field(1, ge=1)
+    page_size: int = Field(20, ge=1)
+    search: Optional[str] = None
+    status: Optional[str] = None
+    job_offer_id: Optional[str] = None
+    order_by: Literal["created_at", "application_number", "status"] = "created_at"
+    asc: Literal["asc", "desc"] = "asc"
+
+
+class JobOfferOutSuccess(BaseOutSuccess):
+    data: JobOfferOut
+
+
+class JobOffersPageOutSuccess(BaseOutPage):
+    data: List[JobOfferOut]
+
+
+class JobApplicationOutSuccess(BaseOutSuccess):
+    data: JobApplicationOut
+
+
+class JobApplicationsPageOutSuccess(BaseOutPage):
+    data: List[JobApplicationOut]
+
+
+class JobAttachmentOutSuccess(BaseOutSuccess):
+    data: JobAttachmentOut
+
+
+class JobAttachmentListOutSuccess(BaseOutSuccess):
+    data: List[JobAttachmentOut]

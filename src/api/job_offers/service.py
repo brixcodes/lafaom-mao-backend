@@ -1,300 +1,327 @@
-from typing import List
+from typing import List, Optional, Tuple
+from datetime import datetime, timezone, timedelta
 from fastapi import Depends
-from src.database import get_session_async
-from src.api.user.models import (DeviceType, NotificationChannel, PermissionEnum, User, UserPermission, UserRole, Role, RoleEnum, UserStatusEnum)
-from src.api.auth.schemas import UpdateDeviceInput, UpdateUserInput, UpdateAccountSettingInput
-from sqlmodel import select, or_
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
-import re
+from sqlalchemy.orm import selectinload
+from sqlmodel import select, or_
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from src.database import get_session_async
+from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode, ApplicationStatusEnum
+from src.api.job_offers.schemas import JobOfferFilter, JobApplicationFilter
+from src.api.auth.utils import generate_random_code
+from src.config import settings
+from src.helper.notifications import JobApplicationConfirmationNotification, JobApplicationOTPNotification
 
 
-class UserService:
+class JobOfferService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
         self.session = session
 
-    async def get(self):
-        statement = select(User)
-        result = await self.session.execute(statement)
-        users = result.scalars().all()
-        return users
-
-    async def create(self, user_create_input, password_hash: bool = False):
-        if not password_hash:
-            user_create_input.password = pwd_context.hash(user_create_input.password)
-        user = User(**user_create_input.model_dump())
-        self.session.add(user)
+    # Job Offers
+    async def create_job_offer(self, data) -> JobOffer:
+        job_offer = JobOffer(**data.model_dump())
+        self.session.add(job_offer)
         await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        await self.session.refresh(job_offer)
+        return job_offer
 
-    async def get_by_id(self, user_id: str):
-        statement = select(User).where(User.id == user_id)
+    async def update_job_offer(self, job_offer: JobOffer, data) -> JobOffer:
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(job_offer, key, value)
+        self.session.add(job_offer)
+        await self.session.commit()
+        await self.session.refresh(job_offer)
+        return job_offer
+
+    async def get_job_offer_by_id(self, job_offer_id: str) -> Optional[JobOffer]:
+        statement = select(JobOffer).where(JobOffer.id == job_offer_id, JobOffer.delete_at.is_(None))
         result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
+        return result.scalars().first()
 
-
-    async def get_by_email(self, user_email: str):
-        statement = select(User).where(User.email == user_email)
+    async def get_job_offer_by_reference(self, reference: str) -> Optional[JobOffer]:
+        statement = select(JobOffer).where(JobOffer.reference == reference, JobOffer.delete_at.is_(None))
         result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
+        return result.scalars().first()
 
-    async def get_by_account(self, account: str):
-        statement = select(User).where(
-            or_(User.email == account, User.phone_number == account)
+    async def list_job_offers(self, filters: JobOfferFilter) -> Tuple[List[JobOffer], int]:
+        statement = select(JobOffer).where(JobOffer.delete_at.is_(None))
+        count_query = select(func.count(JobOffer.id)).where(JobOffer.delete_at.is_(None))
+
+        if filters.search is not None:
+            like_clause = or_(
+                JobOffer.title.contains(filters.search),
+                JobOffer.main_mission.contains(filters.search),
+                JobOffer.responsibilities.contains(filters.search),
+                JobOffer.competencies.contains(filters.search),
+            )
+            statement = statement.where(like_clause)
+            count_query = count_query.where(like_clause)
+
+        if filters.location is not None:
+            statement = statement.where(JobOffer.location.contains(filters.location))
+            count_query = count_query.where(JobOffer.location.contains(filters.location))
+
+        if filters.contract_type is not None:
+            statement = statement.where(JobOffer.contract_type == filters.contract_type)
+            count_query = count_query.where(JobOffer.contract_type == filters.contract_type)
+
+        if filters.salary_min is not None:
+            statement = statement.where(JobOffer.salary >= filters.salary_min)
+            count_query = count_query.where(JobOffer.salary >= filters.salary_min)
+
+        if filters.salary_max is not None:
+            statement = statement.where(JobOffer.salary <= filters.salary_max)
+            count_query = count_query.where(JobOffer.salary <= filters.salary_max)
+
+        if filters.order_by == "created_at":
+            statement = statement.order_by(JobOffer.created_at if filters.asc == "asc" else JobOffer.created_at.desc())
+        elif filters.order_by == "submission_deadline":
+            statement = statement.order_by(JobOffer.submission_deadline if filters.asc == "asc" else JobOffer.submission_deadline.desc())
+        elif filters.order_by == "title":
+            statement = statement.order_by(JobOffer.title if filters.asc == "asc" else JobOffer.title.desc())
+        elif filters.order_by == "salary":
+            statement = statement.order_by(JobOffer.salary if filters.asc == "asc" else JobOffer.salary.desc())
+
+        total_count = (await self.session.execute(count_query)).scalar_one()
+
+        statement = statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+        result = await self.session.execute(statement)
+        return result.scalars().all(), total_count
+
+    async def delete_job_offer(self, job_offer: JobOffer) -> JobOffer:
+        job_offer.delete_at = datetime.now(timezone.utc)
+        self.session.add(job_offer)
+        await self.session.commit()
+        return job_offer
+
+    # Job Applications
+    async def create_job_application(self, data) -> JobApplication:
+        # Generate application number
+        application_number = f"APP-{datetime.now().strftime('%Y%m%d%H%M%S')}-{data.job_offer_id[:8]}"
+        
+        application_data = data.model_dump()
+        application_data['application_number'] = application_number
+        
+        job_application = JobApplication(**application_data)
+        self.session.add(job_application)
+        await self.session.commit()
+        await self.session.refresh(job_application)
+        
+        # Send confirmation email
+        await self._send_application_confirmation_email(job_application)
+        
+        return job_application
+
+    async def update_job_application(self, job_application: JobApplication, data) -> JobApplication:
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(job_application, key, value)
+        self.session.add(job_application)
+        await self.session.commit()
+        await self.session.refresh(job_application)
+        return job_application
+
+    async def get_job_application_by_id(self, application_id: int) -> Optional[JobApplication]:
+        statement = select(JobApplication).where(JobApplication.id == application_id, JobApplication.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def get_job_application_by_number(self, application_number: str) -> Optional[JobApplication]:
+        statement = select(JobApplication).where(JobApplication.application_number == application_number, JobApplication.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def get_full_job_application_by_id(self, application_id: int) -> Optional[JobApplication]:
+        statement = (
+            select(JobApplication)
+            .where(JobApplication.id == application_id, JobApplication.delete_at.is_(None))
+            .options(selectinload(JobApplication.attachments))
         )
         result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
+        return result.scalars().first()
 
-    async def get_by_phone(self, user_phone: str):
-        statement = select(User).where(User.phone_number == user_phone)
+    async def list_job_applications(self, filters: JobApplicationFilter) -> Tuple[List[JobApplication], int]:
+        statement = select(JobApplication).where(JobApplication.delete_at.is_(None))
+        count_query = select(func.count(JobApplication.id)).where(JobApplication.delete_at.is_(None))
+
+        if filters.search is not None:
+            like_clause = or_(
+                JobApplication.first_name.contains(filters.search),
+                JobApplication.last_name.contains(filters.search),
+                JobApplication.email.contains(filters.search),
+                JobApplication.application_number.contains(filters.search),
+            )
+            statement = statement.where(like_clause)
+            count_query = count_query.where(like_clause)
+
+        if filters.status is not None:
+            statement = statement.where(JobApplication.status == filters.status)
+            count_query = count_query.where(JobApplication.status == filters.status)
+
+        if filters.job_offer_id is not None:
+            statement = statement.where(JobApplication.job_offer_id == filters.job_offer_id)
+            count_query = count_query.where(JobApplication.job_offer_id == filters.job_offer_id)
+
+        if filters.order_by == "created_at":
+            statement = statement.order_by(JobApplication.created_at if filters.asc == "asc" else JobApplication.created_at.desc())
+        elif filters.order_by == "application_number":
+            statement = statement.order_by(JobApplication.application_number if filters.asc == "asc" else JobApplication.application_number.desc())
+        elif filters.order_by == "status":
+            statement = statement.order_by(JobApplication.status if filters.asc == "asc" else JobApplication.status.desc())
+
+        total_count = (await self.session.execute(count_query)).scalar_one()
+
+        statement = statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
         result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
-    
-    
-    async def get_users_by_id_lists(self, user_ids: List[str]):
-        statement = select(User).where(
-            User.id.in_(user_ids)
+        return result.scalars().all(), total_count
+
+    async def delete_job_application(self, job_application: JobApplication) -> JobApplication:
+        job_application.delete_at = datetime.now(timezone.utc)
+        self.session.add(job_application)
+        await self.session.commit()
+        return job_application
+
+    # Job Attachments
+    async def create_job_attachment(self, data) -> JobAttachment:
+        attachment = JobAttachment(**data.model_dump())
+        self.session.add(attachment)
+        await self.session.commit()
+        await self.session.refresh(attachment)
+        return attachment
+
+    async def update_job_attachment(self, attachment: JobAttachment, data) -> JobAttachment:
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(attachment, key, value)
+        self.session.add(attachment)
+        await self.session.commit()
+        await self.session.refresh(attachment)
+        return attachment
+
+    async def get_job_attachment_by_id(self, attachment_id: int) -> Optional[JobAttachment]:
+        statement = select(JobAttachment).where(JobAttachment.id == attachment_id, JobAttachment.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def list_attachments_by_application(self, application_id: int) -> List[JobAttachment]:
+        statement = (
+            select(JobAttachment)
+            .where(JobAttachment.application_id == application_id, JobAttachment.delete_at.is_(None))
+            .order_by(JobAttachment.created_at)
         )
         result = await self.session.execute(statement)
-        users = result.scalars().all()
-        return users
+        return result.scalars().all()
 
-    async def update(self, user_id, user_update_input):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        for key, value in user_update_input.dict().items():
-            setattr(user, key, value)
-        self.session.add(user)
+    async def delete_job_attachment(self, attachment: JobAttachment) -> JobAttachment:
+        self.session.delete(attachment)
         await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        return attachment
 
-    async def update_password(self, user_id: str, password: str):
-        statement = select(User).where(User.id == user_id)
+    # OTP Methods for Job Applications
+    async def generate_application_otp(self, application_number: str, email: str) -> str:
+        # Find application by number and email
+        statement = select(JobApplication).where(
+            JobApplication.application_number == application_number,
+            JobApplication.email == email,
+            JobApplication.delete_at.is_(None)
+        )
         result = await self.session.execute(statement)
-        user = result.scalars().one()
-        user.password = pwd_context.hash(password)
-        self.session.add(user)
+        application = result.scalars().first()
+        
+        if application is None:
+            return None
+            
+        # Generate OTP code
+        code = generate_random_code()
+        
+        # Save OTP code
+        otp_code = JobApplicationCode(
+            application_id=application.id,
+            email=email,
+            code=code,
+            end_time=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_CODE_EXPIRE_MINUTES)
+        )
+        
+        self.session.add(otp_code)
         await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        
+        # Send OTP email
+        await self._send_application_otp_email(application, code)
+        
+        return code
 
-    async def update_profile_image(self, user_id: str, picture: str):
-        statement = select(User).where(User.id == user_id)
+    async def verify_application_otp(self, application_number: str, email: str, code: str) -> Optional[JobApplication]:
+        # Find application
+        statement = select(JobApplication).where(
+            JobApplication.application_number == application_number,
+            JobApplication.email == email,
+            JobApplication.delete_at.is_(None)
+        )
         result = await self.session.execute(statement)
-        user = result.scalars().one()
-        user.picture = picture
-        self.session.add(user)
+        application = result.scalars().first()
+        
+        if application is None:
+            return None
+            
+        # Verify OTP code
+        otp_statement = select(JobApplicationCode).where(
+            JobApplicationCode.application_id == application.id,
+            JobApplicationCode.email == email,
+            JobApplicationCode.code == code,
+            JobApplicationCode.active == True,
+            JobApplicationCode.end_time > datetime.now(timezone.utc)
+        )
+        otp_result = await self.session.execute(otp_statement)
+        otp_code = otp_result.scalars().first()
+        
+        if otp_code is None:
+            return None
+            
+        # Deactivate the OTP code after use
+        otp_code.active = False
+        self.session.add(otp_code)
         await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        
+        return application
 
-    async def update_account_setting(self, user_id: str, input: UpdateAccountSettingInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        if input.prefer_notification is not None:
-            user.prefer_notification = input.prefer_notification
-
-        self.session.add(user)
+    async def update_application_by_candidate(self, application: JobApplication, data) -> JobApplication:
+        # Update only allowed fields for candidates
+        allowed_fields = ['phone_number', 'first_name', 'last_name', 'civility', 'country_code', 'date_of_birth']
+        
+        for key, value in data.model_dump(exclude_none=True).items():
+            if key in allowed_fields:
+                setattr(application, key, value)
+                
+        self.session.add(application)
         await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        await self.session.refresh(application)
+        return application
 
-    async def update_phone_or_email(self, user_id: str, account: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'  # Simple regex for email validation
-
-        if not re.match(email_regex, account):
-            user.phone_number = account
-        else:
-            user.email = account
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_profile(self, user_id: str, input: UpdateUserInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        user.first_name = input.first_name
-        user.last_name = input.last_name
-        user.country_code = input.country_code
-        user.lang = input.lang
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-    
-    async def update_device_id(self, user_id: str,device_type : str , input: UpdateDeviceInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
+    # Private email methods
+    async def _send_application_confirmation_email(self, application: JobApplication):
+        """Send confirmation email when job application is created"""
+        # Get job offer details
+        job_offer = await self.get_job_offer_by_id(application.job_offer_id)
+        if job_offer is None:
+            return
+            
+        notification = JobApplicationConfirmationNotification(
+            email=application.email,
+            application_number=application.application_number,
+            job_title=job_offer.title,
+            candidate_name=f"{application.first_name} {application.last_name}",
+            lang="en"  # Default to English, could be made configurable
+        )
         
-        if device_type == DeviceType.ANDROID:
-            user.android_token = input.device_id
-        elif device_type == DeviceType.IOS:
-            user.ios_token = input.device_id
-        elif device_type == DeviceType.WEB:
-            user.web_token = input.device_id
+        notification.send_notification()
 
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-    
-
-    
-
-    async def delete_user(self, user_id: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        await self.session.delete(user)
-        await self.session.commit()
-        return user
-
-
-
-    async def permission_set_up(self):
-        statement = select(User).where(User.email == "admin@laakam.com")
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-
-        if user is None:
-            user = User(
-                first_name="admin",
-                last_name="admin",
-                country_code="CM",
-                email="admin@laakam.com",
-                phone_number="0000000000",
-                lang="en",
-                status=UserStatusEnum.ACTIVE,
-                prefer_notification=NotificationChannel.EMAIL,
-                password=pwd_context.hash("admin")
-            )
-            self.session.add(user)
-            await self.session.commit()
-            await self.session.refresh(user)
-
-        admin = None
-        for role in RoleEnum:
-            statement = select(Role).where(Role.name == role.value)
-            result = await self.session.execute(statement)
-            role_data = result.scalars().first()
-            if role_data is None:
-                role_data = Role(name=role)
-                self.session.add(role_data)
-
-            if role_data.name == RoleEnum.ADMIN:
-                admin = role_data
-
-        await self.session.commit()
-        await self.session.refresh(admin)
-
-        if admin is not None:
-            for permission in PermissionEnum:
-                statement = (
-                    select(UserPermission).where(UserPermission.role_id == admin.id)
-                    .where(UserPermission.permission == permission.value)
-                )
-                result = await self.session.execute(statement)
-                user_permission = result.scalars().first()
-                if user_permission is None:
-                    user_permission = UserPermission(
-                        role_id=admin.id,
-                        permission=permission.value
-                    )
-                    self.session.add(user_permission)
-
-        await self.session.commit()
-
-        statement = select(UserRole).where(UserRole.user_id == user.id).where(UserRole.role_id == admin.id)
-        result = await self.session.execute(statement)
-        user_role = result.scalars().first()
-
-        if user_role is None:
-            user_role = UserRole(
-                user_id=user.id,
-                role_id=admin.id
-            )
-            self.session.add(user_role)
-
-            await self.session.commit()
-
-        return True
-
-    async def has_all_permissions(self,user_id :str, permissions : list = []) -> bool: 
-        statement = select(UserRole.role_id).where(UserRole.user_id == user_id)
+    async def _send_application_otp_email(self, application: JobApplication, code: str):
+        """Send OTP email for application updates"""
+        notification = JobApplicationOTPNotification(
+            email=application.email,
+            code=code,
+            application_number=application.application_number,
+            candidate_name=f"{application.first_name} {application.last_name}",
+            lang="en"  # Default to English, could be made configurable
+        )
         
-        roles_result = await self.session.execute(statement)
-        roles = roles_result.scalars().all()
-        
-        statement = (select(UserPermission).where(UserPermission.user_id == user_id or UserPermission.role_id.in_(roles))
-                        .where(UserPermission.permission.in_(permissions)))
-        
-        
-        values_result = await self.session.execute(statement)
-        values = values_result.all()
-        
-        if len(values) == len(permissions) :
-            return True
-        
-        return False 
-    
-    async def has_any_permissions(self,user_id :str,  permissions : list = []) -> bool: 
-        statement = select(UserRole.role_id).where(UserRole.user_id == user_id)
-        
-        roles_result = await self.session.execute(statement)
-        roles = roles_result.scalars().all()
-    
-    
-        
-        statement = (select(UserPermission).where(UserPermission.user_id == user_id or UserPermission.role_id.in_(roles))
-                        .where(UserPermission.permission.in_(permissions)))
-        
-        
-        values_result = await self.session.execute(statement)
-        values = values_result.all()
-        
-        if len(values)> 1 :
-            return True
-        
-        return False 
-    
-    def has_all_role(self,user_id :str, role : list = []) -> bool: 
-        
-        roles = self.roles
-        
-        for elt in roles :
-            if not (elt.name in role) :
-                return False
-        
-        return True
-    
-    def has_any_role(self,user_id :str, role : list = []) -> bool: 
-        
-        roles = self.roles
-        
-        for elt in roles :
-            if elt.name in role :
-                return True
-        
-        return False
-
+        notification.send_notification()
