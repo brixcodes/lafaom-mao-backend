@@ -5,7 +5,8 @@ from src.helper.model import CustomBaseUUIDModel,CustomBaseModel
 from typing import List, Optional
 from enum import Enum
 from  datetime import datetime
-from sqlalchemy import JSON, TIMESTAMP
+from sqlalchemy import Column, Numeric, JSON, TIMESTAMP
+
 
 
 class ApplicationStatusEnum(str, Enum):
@@ -38,11 +39,16 @@ class JobOffer(CustomBaseUUIDModel, table=True):
     salary: Optional[float] = Field(default=None, description="Salaire brut mensuel en euros")
     benefits: Optional[str] = Field(default=None, description="Avantages proposés")
     
-    submission_fee: float = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
+    submission_fee: Optional[float] = Field(
+        default=None,
+        sa_column=Column(Numeric(precision=12, scale=2))
+    )
     currency : str = Field(default="EUR")
     
-    attachment : List[str] = Field(default=None, sa_column=Field(default=None, sa_column_kwargs={"type_": JSON}).sa_column) 
-    
+    attachment: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(JSON)
+    )
 
     # Conditions d’exercice
     conditions: Optional[str] = Field(default=None, description="Conditions de travail et règles associatives")
@@ -52,9 +58,12 @@ class JobApplication(CustomBaseModel, table=True):
 
     job_offer_id: str = Field(foreign_key="job_offers.id")
     application_number: str = Field(default=None, max_length=50, index=True, unique=True)
-    status: str = Field(default=ApplicationStatusEnum.RECEIVED)
+    status: ApplicationStatusEnum = Field(default=ApplicationStatusEnum.RECEIVED)
     refusal_reason: Optional[str] = Field(default=None)
-    submission_fee: float = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
+    submission_fee: float = Field(
+        default=None,
+        sa_column=Column(Numeric(precision=12, scale=2))
+    )
     
     email : str 
     phone_number : str
@@ -84,6 +93,8 @@ class JobApplicationCode(CustomBaseModel, table=True):
     application_id: int = Field(foreign_key="job_applications.id", nullable=False)
     email: str = Field(nullable=False)
     code: str = Field(nullable=False)
-    end_time: datetime = Field(sa_type=TIMESTAMP(timezone=True), nullable=False)
+    end_time: datetime = Field(
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=False)
+    )
     active: bool = Field(default=True)
 
