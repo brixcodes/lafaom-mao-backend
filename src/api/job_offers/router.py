@@ -1,5 +1,6 @@
+from datetime import datetime, timezone
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
 
 from src.api.auth.utils import check_permissions
 from src.api.user.models import PermissionEnum, User
@@ -21,6 +22,7 @@ from src.api.job_offers.schemas import (
     JobApplicationFilter,
     JobAttachmentOutSuccess,
     JobAttachmentListOutSuccess,
+    UpdateJobOfferStatusInput,
 )
 from src.api.job_offers.dependencies import get_job_offer, get_job_application, get_job_attachment
 
@@ -108,12 +110,30 @@ async def list_job_applications(
     applications, total = await job_offer_service.list_job_applications(filters)
     return {"data": applications, "page": filters.page, "number": len(applications), "total_number": total}
 
+@router.post("/job-applications/change-status", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+async def change_job_application_status(
+    input: UpdateJobOfferStatusInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CHANGE_JOB_APPLICATION_STATUS]))],
+    job_offer_service: JobOfferService = Depends(),
+):
+    application = await job_offer_service.get_job_application_by_id(input.application_id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.JOB_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.JOB_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    application = await job_offer_service.change_job_application_status(input)
+    return {"message": "Job application fetched successfully", "data": application}
 
 @router.post("/job-applications", response_model=JobApplicationOutSuccess, tags=["Job Application"])
 async def create_job_application(
-    input: JobApplicationCreateInput,
+    input: Annotated[JobApplicationCreateInput, Form(...)],
     job_offer_service: JobOfferService = Depends(),
 ):
+    
     # Verify job offer exists
     job_offer = await job_offer_service.get_job_offer_by_id(input.job_offer_id)
     if job_offer is None:
@@ -125,9 +145,29 @@ async def create_job_application(
             ).model_dump(),
         )
     
+    
+    if job_offer.deadline < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.JOB_OFFER_CLOSED.description,
+                error_code=ErrorMessage.JOB_OFFER_CLOSED.value,
+            ).model_dump(),
+        )
+    lt = [val.name for val in input.attachments]
+    for attachment in job_offer.attachment:
+        
+        if attachment not in lt:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message= f"Job attachment {attachment} is required",
+                    error_code=ErrorMessage.JOB_ATTACHMENT_REQUIRED.value,
+                ).model_dump(),
+            )
+    
     application = await job_offer_service.create_job_application(input)
     return {"message": "Job application created successfully", "data": application}
-
 
 @router.get("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
 async def get_job_application_route(
@@ -146,7 +186,7 @@ async def get_job_application_route(
         )
     return {"message": "Job application fetched successfully", "data": full_application}
 
-
+""""
 @router.put("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
 async def update_job_application_route(
     application_id: int,
@@ -169,6 +209,7 @@ async def delete_job_application_route(
     application = await job_offer_service.delete_job_application(application)
     return {"message": "Job application deleted successfully", "data": application}
 
+"""
 
 # Job Attachments
 @router.get("/job-applications/{application_id}/attachments", response_model=JobAttachmentListOutSuccess, tags=["Job Attachment"])
@@ -181,7 +222,7 @@ async def list_attachments(
     attachments = await job_offer_service.list_attachments_by_application(application_id)
     return {"message": "Attachments fetched successfully", "data": attachments}
 
-
+""""
 @router.delete("/job-attachments/{attachment_id}", response_model=JobAttachmentOutSuccess, tags=["Job Attachment"])
 async def delete_attachment(
     attachment_id: int,
@@ -192,6 +233,7 @@ async def delete_attachment(
     attachment = await job_offer_service.delete_job_attachment(attachment)
     return {"message": "Attachment deleted successfully", "data": attachment}
 
+"""
 
 # OTP Endpoints for Job Applications
 @router.post("/job-applications/request-otp", tags=["Job Application OTP"])

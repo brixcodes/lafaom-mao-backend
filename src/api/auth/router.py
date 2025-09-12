@@ -11,7 +11,7 @@ from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswor
 from src.config import settings
 from src.api.user.service import UserService
 from src.api.auth.service import AuthService
-from src.api.user.schemas import  UserFullOutSuccess, UserOutSuccess
+from src.api.user.schemas import  PermissionListOutSuccess, UserFullOutSuccess, UserOutSuccess
 from src.helper.schemas import ErrorMessage,BaseOutFail,BaseOutSuccess
 from datetime import datetime, timezone
 import re
@@ -361,6 +361,15 @@ async def get_me(
     }
 
 
+@router.get('/my-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+async def get_user_permissions(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    user_service: UserService = Depends()
+):
+    
+    user_permissions = await user_service.get_all_user_permissions(user_id=current_user.id)
+    
+    return  { "message" : "My Permissions", "data" : user_permissions }
 
 
 @router.post("/update-profile",response_model=UserFullOutSuccess)

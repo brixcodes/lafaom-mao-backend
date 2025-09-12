@@ -6,10 +6,10 @@ from src.redis_client import get_from_redis, set_to_redis
 
 from src.api.auth.utils import  check_permissions, get_current_active_user, require_oauth_client
 from src.api.user.dependencies import get_user
-from src.api.user.models import PermissionEnum, User
+from src.api.user.models import PermissionEnum, RoleEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
-from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
+from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateStatusInput, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
 
 router = APIRouter()
 
@@ -67,13 +67,14 @@ async def revoke_roles(
     
     return  { "message" : "Roles revoked successfully", "data" : user_permissions }
 
-@router.get('/users/permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.get('/users/permissions/{user_id}',response_model=PermissionListOutSuccess,tags=["Users"])
 async def get_user_permissions(
+    user_id : str,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
     user_service: UserService = Depends()
 ):
     
-    user_permissions = await user_service.get_all_user_permissions(user_id=current_user.id)
+    user_permissions = await user_service.get_all_user_permissions(user_id=user_id)
     
     return  { "message" : "User Permissions", "data" : user_permissions }
 
@@ -94,7 +95,7 @@ async def read_user_list(
     }
 
 @router.post("/users", response_model=UserOutSuccess,tags=["Users"])
-async def read_user_list( 
+async def create_user( 
         user_create_input: CreateUserInput,
         current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
         user_service: UserService = Depends()
@@ -121,9 +122,24 @@ async def read_user_list( input: UserListInput , user_service: UserService = Dep
 
 
 @router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
-async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
+async def read_user_by_id(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
     
     return  {"data" : user, "message":"Users fetch successfully" }
+
+
+
+@router.post("/users/change-status/{user_id}", response_model=UserOutSuccess,tags=["Users"])
+async def update_user_status(
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
+    user_id: str,
+    user_update_input: UpdateStatusInput,
+    user : Annotated[User, Depends(get_user)],
+    user_service: UserService = Depends(),
+):
+    
+    user = await user_service.update_user_status(user_id, user_update_input.status)
+    
+    return  {"data" : user, "message":"Users updated status successfully" }
 
 
 @router.put("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
@@ -156,6 +172,16 @@ async def delete_user(
     user : Annotated[User, Depends(get_user)],
     user_service: UserService = Depends(),
 ):
+    val = await user_service.has_any_role(user_id, [RoleEnum.SUPER_ADMIN])
+    
+    if val:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,            
+            detail=BaseOutFail(
+                message=ErrorMessage.CAN_NOT_DELETE_SUPER_ADMIN.description,
+                error_code= ErrorMessage.CAN_NOT_DELETE_SUPER_ADMIN.value
+            ).model_dump()
+        )
     user = await user_service.delete_user(user_id)
     return {"data" : user, "message":"Users updated successfully" }   
 

@@ -104,9 +104,8 @@ origins = [
     "http://127.0.0.1:4200",
     "http://127.0.0.1:5500",
     "http://localhost:5173",
-    "https://laakam.com",
-    "https://api.laakam.com",
-    "https://www.laakam.com",
+    "https://www.lafaom.vertex-cam.com/",
+    "https://lafaom.vertex-cam.com",
     
 ]
 

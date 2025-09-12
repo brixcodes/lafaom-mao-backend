@@ -5,12 +5,13 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
-
+from slugify import slugify
 from src.database import get_session_async
 from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode, ApplicationStatusEnum
-from src.api.job_offers.schemas import JobOfferFilter, JobApplicationFilter
+from src.api.job_offers.schemas import JobApplicationCreateInput, JobApplicationUpdateByCandidateInput, JobOfferFilter, JobApplicationFilter, UpdateJobOfferStatusInput
 from src.api.auth.utils import generate_random_code
 from src.config import settings
+from src.helper.file_helper import FileHelper
 from src.helper.notifications import JobApplicationConfirmationNotification, JobApplicationOTPNotification
 
 
@@ -96,9 +97,27 @@ class JobOfferService:
         return job_offer
 
     # Job Applications
-    async def create_job_application(self, data) -> JobApplication:
+    async def create_job_application(self,job_offer: JobOffer, data : JobApplicationCreateInput) -> JobApplication:
         # Generate application number
-        application_number = f"APP-{datetime.now().strftime('%Y%m%d%H%M%S')}-{data.job_offer_id[:8]}"
+        statement = select(func.count(JobApplication.id).where(JobApplication.job_offer_id == job_offer.id))
+        result = await self.session.execute(statement)
+        count = result.scalar() or 0
+        sequence_number = f"{count + 1:04d}"  # 4-digit, zero-padded
+        
+        # Generate application number
+        application_number = f"APP-{job_offer.reference}-{sequence_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        data_attachment = []
+        
+        for attachment in data.attachments:
+            
+            cover_url, _, _ = await FileHelper.upload_file(
+                attachment.file, f"/job-applications/{application_number}", slugify(attachment.name)
+            )
+            data_attachment.append({
+                "document_type": attachment.name,
+                "file_path": cover_url
+            })
         
         application_data = data.model_dump()
         application_data['application_number'] = application_number
@@ -107,6 +126,10 @@ class JobOfferService:
         self.session.add(job_application)
         await self.session.commit()
         await self.session.refresh(job_application)
+        
+        for attachment in data_attachment:
+            attachment['application_id'] = job_application.id
+            await self.create_job_attachment(attachment)
         
         # Send confirmation email
         await self._send_application_confirmation_email(job_application)
@@ -183,7 +206,7 @@ class JobOfferService:
 
     # Job Attachments
     async def create_job_attachment(self, data) -> JobAttachment:
-        attachment = JobAttachment(**data.model_dump())
+        attachment = JobAttachment(**data)
         self.session.add(attachment)
         await self.session.commit()
         await self.session.refresh(attachment)
@@ -199,6 +222,11 @@ class JobOfferService:
 
     async def get_job_attachment_by_id(self, attachment_id: int) -> Optional[JobAttachment]:
         statement = select(JobAttachment).where(JobAttachment.id == attachment_id, JobAttachment.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+    
+    async def get_job_attachment_by_type_and_application_id(self, document_type :str, application_id: int) -> Optional[JobAttachment]:
+        statement = select(JobAttachment).where(JobAttachment.document_type == document_type, JobAttachment.application_id == application_id)
         result = await self.session.execute(statement)
         return result.scalars().first()
 
@@ -283,19 +311,52 @@ class JobOfferService:
         
         return application
 
-    async def update_application_by_candidate(self, application: JobApplication, data) -> JobApplication:
+    async def update_application_by_candidate(self, application: JobApplication, data :JobApplicationUpdateByCandidateInput) -> JobApplication:
         # Update only allowed fields for candidates
-        allowed_fields = ['phone_number', 'first_name', 'last_name', 'civility', 'country_code', 'date_of_birth']
+        allowed_fields = ['phone_number', 'first_name', 'last_name', 'civility', 'country_code', 'date_of_birth',"attachments"]
+        attachment_data = []
+        for attachment in data.attachments:
+            
+            cover_url, _, _ = await FileHelper.upload_file(
+                attachment.file, f"/job-applications/{application.application_number}", slugify(attachment.name)
+            )
+            attachment_data.append({
+                "document_type": attachment.name,
+                "file_path": cover_url
+            })
+        
         
         for key, value in data.model_dump(exclude_none=True).items():
             if key in allowed_fields:
                 setattr(application, key, value)
                 
+                
         self.session.add(application)
         await self.session.commit()
         await self.session.refresh(application)
+        
+        # Update job application attachments
+        for attachment in attachment_data:
+            attachment_object_result = await self.get_job_attachment_by_type_and_application_id(attachment['document_type'], application.id)
+            if attachment_object_result is not None:
+                await self.delete_job_attachment(attachment_object_result)
+            job_attachment = JobAttachment(**attachment)
+            self.session.add(job_attachment)
+            await self.session.commit()
+            await self.session.refresh(job_attachment)
         return application
 
+    async def change_job_application_status(self,application: JobApplication, input: UpdateJobOfferStatusInput) -> List[JobApplication]:
+    
+        application.status = input.status
+        application.reject_reason = input.reason
+        self.session.add(application)
+        await self.session.commit()
+        await self.session.refresh(application)
+        
+        return application
+    
+    
     # Private email methods
     async def _send_application_confirmation_email(self, application: JobApplication):
         """Send confirmation email when job application is created"""

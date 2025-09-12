@@ -25,6 +25,7 @@ if config.config_file_name is not None:
 from src.api.user.models import User,Role,UserRole,UserPermission
 from src.api.auth.models import RefreshToken
 from src.api.blog.models import Post, PostCategory, PostSection
+from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode
 
 
 

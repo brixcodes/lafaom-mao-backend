@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import List, Optional, Literal
+from fastapi import UploadFile
 from pydantic import BaseModel, Field
 from src.helper.schemas import BaseOutPage, BaseOutSuccess
 from src.api.job_offers.models import ApplicationStatusEnum
@@ -14,6 +15,7 @@ class JobOfferCreateInput(BaseModel):
     uncertain_term: bool = False
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    deadline: Optional[date] = None
     weekly_hours: Optional[int] = None
     driving_license_required: bool = False
     submission_deadline: date
@@ -38,6 +40,7 @@ class JobOfferUpdateInput(BaseModel):
     uncertain_term: Optional[bool] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    deadline: Optional[date] = None
     weekly_hours: Optional[int] = None
     driving_license_required: Optional[bool] = None
     submission_deadline: Optional[date] = None
@@ -91,6 +94,11 @@ class JobOfferFilter(BaseModel):
     order_by: Literal["created_at", "submission_deadline", "title", "salary"] = "created_at"
     asc: Literal["asc", "desc"] = "asc"
 
+class JobAttachmentInput(BaseModel):
+
+    name: str
+    file : UploadFile
+
 
 class JobApplicationCreateInput(BaseModel):
     job_offer_id: str
@@ -101,7 +109,9 @@ class JobApplicationCreateInput(BaseModel):
     civility: Optional[str] = None
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
-    submission_fee: float
+    attachments : List[JobAttachmentInput]
+    
+
 
 
 class JobApplicationUpdateInput(BaseModel):
@@ -111,13 +121,13 @@ class JobApplicationUpdateInput(BaseModel):
 
 class JobApplicationUpdateByCandidateInput(BaseModel):
     application_number: str
-    email: str
     phone_number: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     civility: Optional[str] = None
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
+    attachments : List[JobAttachmentInput]
     otp_code: str
 
 
@@ -187,3 +197,9 @@ class JobAttachmentOutSuccess(BaseOutSuccess):
 
 class JobAttachmentListOutSuccess(BaseOutSuccess):
     data: List[JobAttachmentOut]
+
+
+class UpdateJobOfferStatusInput(BaseModel):
+    application_id: int
+    status: ApplicationStatusEnum
+    reason : Optional[str] = None

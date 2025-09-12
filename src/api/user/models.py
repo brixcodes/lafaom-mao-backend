@@ -63,9 +63,7 @@ class PermissionEnum(str, Enum):
     CAN_DELETE_JOB_OFFER = "can_delete_job_offer"
     
     CAN_VIEW_JOB_APPLICATION = "can_view_job_application"
-    CAN_CREATE_JOB_APPLICATION = "can_create_job_application"
-    CAN_UPDATE_JOB_APPLICATION = "can_update_job_application"
-    CAN_DELETE_JOB_APPLICATION = "can_delete_job_application"
+    CAN_CHANGE_JOB_APPLICATION_STATUS = "can_change_job_application_status"
     
     
     

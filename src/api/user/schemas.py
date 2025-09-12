@@ -23,6 +23,8 @@ class CreateUserInput(BaseModel):
     user_type : str 
     two_factor_enabled : bool 
     
+class UpdateStatusInput(BaseModel):
+    status : UserTypeEnum
 
 class UpdateUserInput(BaseModel):
     

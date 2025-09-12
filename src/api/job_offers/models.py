@@ -28,6 +28,7 @@ class JobOffer(CustomBaseUUIDModel, table=True):
     weekly_hours: Optional[int] = Field(default=None, description="Temps de travail hebdomadaire en heures")
     driving_license_required: bool = Field(default=False, description="Permis requis")
     submission_deadline: date = Field(default=None, description="Dernière date de soumission")
+    deadline: date = Field(default=None, description="Dernière date de soumission")
 
     # Missions et responsabilités (texte libre)
     main_mission: Optional[str] = Field(default=None, description="Mission principale du poste")
@@ -38,6 +39,7 @@ class JobOffer(CustomBaseUUIDModel, table=True):
     # Salaire et avantages
     salary: Optional[float] = Field(default=None, description="Salaire brut mensuel en euros")
     benefits: Optional[str] = Field(default=None, description="Avantages proposés")
+    
     
     submission_fee: Optional[float] = Field(
         default=None,
@@ -84,7 +86,6 @@ class JobAttachment(CustomBaseModel, table=True):
     application_id: int = Field(foreign_key="job_applications.id", nullable=False)
     document_type: str = Field( max_length=100)
     file_path: str = Field(max_length=255)
-    upload_date: Optional[datetime] = Field(default=None)
 
 
 class JobApplicationCode(CustomBaseModel, table=True):

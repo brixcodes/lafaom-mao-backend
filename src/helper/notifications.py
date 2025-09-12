@@ -151,6 +151,25 @@ class WelcomeNotification(NotificationBase) :
                 } 
         }
 
+class SendPasswordNotification(NotificationBase) :
+
+    subject : str = "Account Password"
+    email_template : str = "password_email.html"  
+    name : str = ""
+    password : str = ""
+        
+        
+    def email_data(self)->dict :
+        return{
+            "to_email" :self.email,
+            "subject":self.subject,
+            "template_name":self.email_template ,
+            "lang":self.lang,
+            "context":{
+                    "user_name":self.name,
+                    "user_password":self.password
+                } 
+        }
 
 class JobApplicationConfirmationNotification(NotificationBase) :
 

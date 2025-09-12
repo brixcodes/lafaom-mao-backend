@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 import re
 
+from src.helper.notifications import SendPasswordNotification
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -104,6 +106,16 @@ class UserService:
         await self.session.commit()
         await self.session.refresh(user)
         return user
+    
+    async def update_user_status(self, user_id: str,status : str):
+        statement = select(User).where(User.id == user_id)
+        result = await self.session.execute(statement)
+        user = result.scalars().one()
+        user.status = status
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
 
     async def create(self, user_create_input, password_hash: bool = False):
         if not password_hash:
@@ -112,6 +124,14 @@ class UserService:
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
+        
+        notification = SendPasswordNotification(
+            email=user_create_input.email,
+            password=user_create_input.password,
+            lang="en"  # Default to English, could be made configurable
+        )
+        
+        notification.send_notification()
         return user
 
     async def get_by_id(self, user_id: str):
@@ -274,7 +294,6 @@ class UserService:
             Profession_status = ProfessionStatus(
                 user_id=user_id
             )
-
         
         Profession_status.employer = input.employer
         Profession_status.job_position = input.job_position
@@ -329,9 +348,12 @@ class UserService:
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
+        user.email = "#" + user.email.replace('@', '#') +"#"
+        user.status = UserStatusEnum.DELETED
         user.delete_at = datetime.now(timezone.utc)
         await self.session.commit()
         return user
+
 
     async def assign_role(self, user_id: str, role_id: str):
 
@@ -511,9 +533,15 @@ class UserService:
         
         return False 
     
-    def has_all_role(self,user_id :str, role : list = []) -> bool: 
+    async def get_user_role (self,user_id :str):
+        statement = select(Role).join(UserRole, Role.id == UserRole.role_id).where(UserRole.user_id == user_id)
+        result = await self.session.execute(statement)
+        user_role = result.scalars().all()
+        return user_role
+    
+    async def has_all_role(self,user_id :str, role : list = []) -> bool: 
         
-        roles = self.roles
+        roles = await self.get_user_role(user_id)
         
         for elt in roles :
             if not (elt.name in role) :
@@ -521,9 +549,9 @@ class UserService:
         
         return True
     
-    def has_any_role(self,user_id :str, role : list = []) -> bool: 
+    async def has_any_role(self,user_id :str, role : list = []) -> bool: 
         
-        roles = self.roles
+        roles = await self.get_user_role(user_id)
         
         for elt in roles :
             if elt.name in role :

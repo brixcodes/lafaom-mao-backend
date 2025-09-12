@@ -152,9 +152,13 @@ class ErrorMessage(Enum):
     # Job Attachment Errors
     JOB_ATTACHMENT_NOT_FOUND = ('job_attachment_not_found',"Job attachment not found")
     
+    JOB_OFFER_CLOSED = ('job_offer_closed',"Job offer is closed")
+    
     # OTP Errors
     INVALID_OTP_OR_APPLICATION_NOT_FOUND = ('invalid_otp_or_application_not_found',"Invalid OTP code or application not found")
     
+    JOB_ATTACHMENT_REQUIRED = ('job_attachment_required',"Job attachment is required")
     
+    CAN_NOT_DELETE_SUPER_ADMIN = ('can_not_delete_super_admin',"Can not delete super admin")
     def __str__(self):
         return self.value   
