@@ -36,6 +36,22 @@ async def list_categories(
     categories = await blog_service.list_categories()
     return {"message": "Categories fetched successfully", "data": categories}
 
+@router.get("/blog/categories/{category_id}", response_model=PostCategoryOutSuccess, tags=["Post Category"])
+async def get_category_route(
+    category_id: int,
+    blog_service: BlogService = Depends(),
+):
+    category = await blog_service.get_category_by_id(category_id)
+    if category is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Category not found",
+                error_code="category_not_found",
+            ).model_dump(),
+        )
+    return {"message": "Category fetched successfully", "data": category}
+
 
 @router.post("/blog/categories", response_model=PostCategoryOutSuccess,tags=["Post Category"])
 async def create_category(
