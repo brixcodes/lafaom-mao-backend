@@ -15,7 +15,6 @@ class JobOfferCreateInput(BaseModel):
     uncertain_term: bool = False
     start_date: Optional[date] = None
     end_date: Optional[date] = None
-    deadline: Optional[date] = None
     weekly_hours: Optional[int] = None
     driving_license_required: bool = False
     submission_deadline: date
@@ -40,7 +39,6 @@ class JobOfferUpdateInput(BaseModel):
     uncertain_term: Optional[bool] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
-    deadline: Optional[date] = None
     weekly_hours: Optional[int] = None
     driving_license_required: Optional[bool] = None
     submission_deadline: Optional[date] = None
