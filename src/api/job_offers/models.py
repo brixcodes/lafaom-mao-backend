@@ -66,7 +66,7 @@ class JobApplication(CustomBaseModel, table=True):
         default=None,
         sa_column=Column(Numeric(precision=12, scale=2))
     )
-    
+    currency : Optional[str] = Field(default="EUR",nullable=True)
     email : str 
     phone_number : str
     first_name : str
@@ -83,7 +83,7 @@ class JobApplication(CustomBaseModel, table=True):
 class JobAttachment(CustomBaseModel, table=True):
     __tablename__ = "job_attachments"
 
-    application_id: int = Field(foreign_key="job_applications.id", nullable=False)
+    application_id: Optional[int] = Field(foreign_key="job_applications.id", nullable=True)
     document_type: str = Field( max_length=100)
     file_path: str = Field(max_length=255)
 

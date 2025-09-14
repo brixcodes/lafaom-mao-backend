@@ -64,6 +64,7 @@ class PostFilter(BaseModel):
     page_size: int = Field(20, ge=1)
     search: Optional[str] = None
     category_id: Optional[int] = None
+    is_published: Optional[bool] = None
     tag: Optional[str] = None
     order_by: Literal["created_at", "published_at", "title"] = "created_at"
     asc: Literal["asc", "desc"] = "asc"

@@ -152,6 +152,12 @@ class BlogService:
         if filters.category_id is not None:
             statement = statement.where(Post.category_id == filters.category_id)
             count_query = count_query.where(Post.category_id == filters.category_id)
+            
+        if filters.is_published != None and filters.is_published :
+            
+            statement = statement.where(Post.published_at != None)
+            count_query = count_query.where(Post.published_at != None)
+
 
         if filters.tag is not None:
             # JSON contains check can vary by DB; for portability, do a simple text contains on tags json string cast

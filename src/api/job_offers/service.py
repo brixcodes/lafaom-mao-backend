@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
-from fastapi import Depends
+from fastapi import Depends, HTTPException,status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,11 +8,12 @@ from sqlmodel import select, or_
 from slugify import slugify
 from src.database import get_session_async
 from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode, ApplicationStatusEnum
-from src.api.job_offers.schemas import JobApplicationCreateInput, JobApplicationUpdateByCandidateInput, JobOfferFilter, JobApplicationFilter, UpdateJobOfferStatusInput
+from src.api.job_offers.schemas import JobApplicationCreateInput, JobApplicationUpdateByCandidateInput, JobAttachmentInput, JobOfferFilter, JobApplicationFilter, UpdateJobOfferStatusInput
 from src.api.auth.utils import generate_random_code
 from src.config import settings
 from src.helper.file_helper import FileHelper
 from src.helper.notifications import JobApplicationConfirmationNotification, JobApplicationOTPNotification
+from src.helper.schemas import BaseOutFail, ErrorMessage
 
 
 class JobOfferService:
@@ -99,7 +100,7 @@ class JobOfferService:
     # Job Applications
     async def create_job_application(self,job_offer: JobOffer, data : JobApplicationCreateInput) -> JobApplication:
         # Generate application number
-        statement = select(func.count(JobApplication.id).where(JobApplication.job_offer_id == job_offer.id))
+        statement = select(func.count(JobApplication.id)).where(JobApplication.job_offer_id == job_offer.id)
         result = await self.session.execute(statement)
         count = result.scalar() or 0
         sequence_number = f"{count + 1:04d}"  # 4-digit, zero-padded
@@ -111,16 +112,22 @@ class JobOfferService:
         
         for attachment in data.attachments:
             
-            cover_url, _, _ = await FileHelper.upload_file(
-                attachment.file, f"/job-applications/{application_number}", slugify(attachment.name)
-            )
-            data_attachment.append({
-                "document_type": attachment.name,
-                "file_path": cover_url
-            })
+            doc = await self.get_job_attachment_by_url(attachment.url)
+            if doc is None or doc.application_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=BaseOutFail(
+                        message=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.description + f" ({attachment})",
+                        error_code=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.value,
+                    ).model_dump(),
+                )
+            data_attachment.append(doc)
         
         application_data = data.model_dump()
+        del application_data['attachments']
         application_data['application_number'] = application_number
+        application_data["currency"] = job_offer.currency
+        application_data["submission_fee"] = job_offer.submission_fee
         
         job_application = JobApplication(**application_data)
         self.session.add(job_application)
@@ -128,21 +135,14 @@ class JobOfferService:
         await self.session.refresh(job_application)
         
         for attachment in data_attachment:
-            attachment['application_id'] = job_application.id
-            await self.create_job_attachment(attachment)
+            
+            await self.associate_job_attachment( attachment=attachment,application_id=job_application.id)
         
-        # Send confirmation email
+        
         await self._send_application_confirmation_email(job_application)
         
         return job_application
 
-    async def update_job_application(self, job_application: JobApplication, data) -> JobApplication:
-        for key, value in data.model_dump(exclude_none=True).items():
-            setattr(job_application, key, value)
-        self.session.add(job_application)
-        await self.session.commit()
-        await self.session.refresh(job_application)
-        return job_application
 
     async def get_job_application_by_id(self, application_id: int) -> Optional[JobApplication]:
         statement = select(JobApplication).where(JobApplication.id == application_id, JobApplication.delete_at.is_(None))
@@ -198,23 +198,24 @@ class JobOfferService:
         result = await self.session.execute(statement)
         return result.scalars().all(), total_count
 
-    async def delete_job_application(self, job_application: JobApplication) -> JobApplication:
-        job_application.delete_at = datetime.now(timezone.utc)
-        self.session.add(job_application)
-        await self.session.commit()
-        return job_application
 
     # Job Attachments
-    async def create_job_attachment(self, data) -> JobAttachment:
-        attachment = JobAttachment(**data)
+    async def create_job_attachment(self, data: JobAttachmentInput) -> JobAttachment:
+        cover_url, _, _ = await FileHelper.upload_file(
+                data.file, f"/job-applications", slugify(data.name)
+            )
+        attachment = JobAttachment(
+            file_path=cover_url,
+            document_type=data.name,
+        )
         self.session.add(attachment)
         await self.session.commit()
         await self.session.refresh(attachment)
         return attachment
 
-    async def update_job_attachment(self, attachment: JobAttachment, data) -> JobAttachment:
-        for key, value in data.model_dump(exclude_none=True).items():
-            setattr(attachment, key, value)
+
+    async def associate_job_attachment(self, attachment: JobAttachment, application_id: int) -> JobAttachment:
+        attachment.application_id = application_id
         self.session.add(attachment)
         await self.session.commit()
         await self.session.refresh(attachment)
@@ -222,6 +223,11 @@ class JobOfferService:
 
     async def get_job_attachment_by_id(self, attachment_id: int) -> Optional[JobAttachment]:
         statement = select(JobAttachment).where(JobAttachment.id == attachment_id, JobAttachment.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+    
+    async def get_job_attachment_by_url(self, url: str) -> Optional[JobAttachment]:
+        statement = select(JobAttachment).where(JobAttachment.file_path == url, JobAttachment.delete_at.is_(None))
         result = await self.session.execute(statement)
         return result.scalars().first()
     
@@ -239,7 +245,18 @@ class JobOfferService:
         result = await self.session.execute(statement)
         return result.scalars().all()
 
+    async def delete_job_attachment_by_application_and_type(self, application_id: int, document_type: str) -> JobAttachment:
+        attachment = await self.get_job_attachment_by_type_and_application_id(document_type, application_id)
+        if attachment is None:
+            return None
+        FileHelper.delete_file(attachment.file_path)
+        self.session.delete(attachment)
+        await self.session.commit()
+        return attachment
+    
     async def delete_job_attachment(self, attachment: JobAttachment) -> JobAttachment:
+    
+        FileHelper.delete_file(attachment.file_path)
         self.session.delete(attachment)
         await self.session.commit()
         return attachment
@@ -317,39 +334,37 @@ class JobOfferService:
         attachment_data = []
         for attachment in data.attachments:
             
-            cover_url, _, _ = await FileHelper.upload_file(
-                attachment.file, f"/job-applications/{application.application_number}", slugify(attachment.name)
-            )
-            attachment_data.append({
-                "document_type": attachment.name,
-                "file_path": cover_url
-            })
-        
-        
+            doc = await self.get_job_attachment_by_url(attachment.url)
+            if doc is None or (doc.application_id is not None and doc.application_id != application.id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=BaseOutFail(
+                        message=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.description + f" ({attachment})",
+                        error_code=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.value,
+                    ).model_dump(),
+                )
+            elif doc.application_id is None :
+                attachment_data.append(doc)
+                
+    
         for key, value in data.model_dump(exclude_none=True).items():
             if key in allowed_fields:
                 setattr(application, key, value)
-                
-                
+
         self.session.add(application)
         await self.session.commit()
         await self.session.refresh(application)
         
         # Update job application attachments
         for attachment in attachment_data:
-            attachment_object_result = await self.get_job_attachment_by_type_and_application_id(attachment['document_type'], application.id)
-            if attachment_object_result is not None:
-                await self.delete_job_attachment(attachment_object_result)
-            job_attachment = JobAttachment(**attachment)
-            self.session.add(job_attachment)
-            await self.session.commit()
-            await self.session.refresh(job_attachment)
+            await self.delete_job_attachment_by_application_and_type(application.id, attachment.document_type)
+            await self.associate_job_attachment(attachment, application.id)
         return application
 
     async def change_job_application_status(self,application: JobApplication, input: UpdateJobOfferStatusInput) -> List[JobApplication]:
     
         application.status = input.status
-        application.reject_reason = input.reason
+        application.refusal_reason = input.reason
         self.session.add(application)
         await self.session.commit()
         await self.session.refresh(application)

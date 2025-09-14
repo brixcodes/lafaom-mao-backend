@@ -159,6 +159,7 @@ class ErrorMessage(Enum):
     
     JOB_ATTACHMENT_REQUIRED = ('job_attachment_required',"Job attachment is required")
     
+    
     CAN_NOT_DELETE_SUPER_ADMIN = ('can_not_delete_super_admin',"Can not delete super admin")
     def __str__(self):
         return self.value   

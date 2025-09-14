@@ -99,6 +99,10 @@ class JobAttachmentInput(BaseModel):
     name: str
     file : UploadFile
 
+class JobAttachmentInput2(BaseModel):
+
+    name: str
+    url : str
 
 class JobApplicationCreateInput(BaseModel):
     job_offer_id: str
@@ -109,7 +113,7 @@ class JobApplicationCreateInput(BaseModel):
     civility: Optional[str] = None
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
-    attachments : List[JobAttachmentInput]
+    attachments : Optional[List[JobAttachmentInput2]]=None
     
 
 
@@ -127,7 +131,8 @@ class JobApplicationUpdateByCandidateInput(BaseModel):
     civility: Optional[str] = None
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
-    attachments : List[JobAttachmentInput]
+    attachments : Optional[List[JobAttachmentInput2]]
+    email : str
     otp_code: str
 
 
@@ -138,10 +143,9 @@ class JobApplicationOTPRequestInput(BaseModel):
 
 class JobAttachmentOut(BaseModel):
     id: int
-    application_id: int
+    application_id: Optional[int]
     document_type: str
     file_path: str
-    upload_date: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
@@ -153,6 +157,7 @@ class JobApplicationOut(BaseModel):
     status: str
     refusal_reason: Optional[str]
     submission_fee: float
+    currency: str
     email: str
     phone_number: str
     first_name: str
@@ -162,7 +167,7 @@ class JobApplicationOut(BaseModel):
     date_of_birth: Optional[date]
     created_at: datetime
     updated_at: datetime
-    attachments: List[JobAttachmentOut] = []
+    
 
 
 class JobApplicationFilter(BaseModel):

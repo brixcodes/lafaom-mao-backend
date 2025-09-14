@@ -64,6 +64,7 @@ class PermissionEnum(str, Enum):
     
     CAN_VIEW_JOB_APPLICATION = "can_view_job_application"
     CAN_CHANGE_JOB_APPLICATION_STATUS = "can_change_job_application_status"
+    CAN_DELETE_JOB_ATTACHMENT = "can_delete_job_attachment"
     
     
     
