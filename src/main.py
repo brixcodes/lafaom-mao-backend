@@ -6,6 +6,7 @@ from src.config import settings
 from src.api.user.router import router as user_router
 from src.api.blog.router import router as blog_router
 from src.api.job_offers.router import router as job_offers_router
+from src.api.payments.router import router as payments_router
 from src.api.auth.router import router as auth_router
 import firebase_admin
 from firebase_admin import credentials
@@ -48,6 +49,7 @@ app.include_router(auth_router, prefix=base_url + "/auth", tags=["Auth"])
 app.include_router(user_router, prefix=base_url )
 app.include_router(blog_router, prefix=base_url )
 app.include_router(job_offers_router, prefix=base_url )
+app.include_router(payments_router, prefix=base_url, tags=["Payments"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

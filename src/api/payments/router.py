@@ -1,125 +1,85 @@
-from fastapi import APIRouter, Depends, HTTPException,status
+import hashlib
+import hmac
 from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Header
+from src.api.payments.dependencies import get_payment_by_transaction
+from src.api.payments.models import PaymentStatusEnum
+from src.api.payments.service import PaymentService 
+from src.api.payments.schemas import  WebhookPayload
+from src.api.auth.models import User
+from src.config import settings
+# This is a placeholder for your actual dependency to get the current user
+# You should replace it with your actual implementation.
+async def get_current_active_user() -> User:
+    # In a real application, you would get the user from the request's
+    # authentication credentials (e.g., a JWT token).
+    # For this example, we'll return a dummy user.
+    return User(id="user123", email="user@example.com", is_active=True)
 
-from fastapi.responses import JSONResponse
-from src.helper.utils import NotificationHelper
-from src.redis_client import get_from_redis, set_to_redis
-
-from src.api.auth.utils import  check_permissions, get_current_active_user, require_oauth_client
-from src.api.user.dependencies import get_user
-from src.api.user.models import PermissionEnum, User
-from src.helper.schemas import BaseOutFail, ErrorMessage
-from src.api.user.service import UserService
-from src.api.user.schemas import ( UserListInput, UserListOutSuccess, UserOutSuccess,  UserUpdateInput, UsersOutSuccess)
 
 router = APIRouter()
 
 
-@router.get("/stats/get-user-stat",tags=["Stats"])
-async def get_user_dashboard_stat(current_user: Annotated[User, Depends(get_current_active_user)]):
+@router.post("/cinetpay/notify")
+async def cinetpay_webhook_handler(
     
-    return  {
-        "data" : {
-            
-        },
-        "message" : "Client stats fetch successfully"
-    }    
-@router.post("/users/internal", response_model=UserListOutSuccess,tags=["Users"])
-async def read_user_list( input: UserListInput , user_service: UserService = Depends(),claims = Depends(require_oauth_client({"user:read"}))):
-
-    users = await user_service.get_users_by_id_lists(user_ids=input.user_ids)
-    return  {"data" : users, "message":"Users list fetch successfully" }
-
-
-@router.get("/users/{user_id}", response_model=UserOutSuccess,tags=["Users"])
-async def read_user(current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],user : Annotated[User, Depends(get_user)]):
-
-    return  {"data" : user, "message":"Users fetch successfully" }
-
-
-@router.put("/users/{user_id}")
-async def update_user(
-    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
-    user_id: str,
-    user_update_input: UserUpdateInput,
-    user : Annotated[User, Depends(get_user)],
-    user_service: UserService = Depends(),
+    payload: WebhookPayload,
+    x_token: str = Header(..., alias="x-token")
+    
 ):
-    user_email = await user_service.get_by_email(user_email=user_update_input.email)
-    if user_email is not None and user_email.id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,            
-            detail=BaseOutFail(
-                message=ErrorMessage.EMAIL_ALREADY_TAKEN.description,
-                error_code= ErrorMessage.EMAIL_ALREADY_TAKEN.value
-            ).model_dump()
-        )
+    # Step 1: Concatenate fields in correct order
+    data_string = (
+        payload.cpm_site_id
+        + payload.cpm_trans_id
+        + payload.cpm_trans_date
+        + payload.cpm_amount
+        + payload.cpm_currency
+        + payload.signature
+        + payload.payment_method
+        + payload.cel_phone_num
+        + payload.cpm_phone_prefixe
+        + payload.cpm_language
+        + payload.cpm_version
+        + payload.cpm_payment_config
+        + payload.cpm_page_action
+        + payload.cpm_custom
+        + payload.cpm_designation
+        + payload.cpm_error_message
+    )
+
+    
+    generated_token = hmac.new(
+        settings.CINETPAY_API_KEY.encode("utf-8"),
+        data_string.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    
+    if not hmac.compare_digest(x_token, generated_token):
+        raise HTTPException(status_code=403, detail="Invalid token")
+    
+    PaymentService.check_cash_in_status.apply_async(
+                kwargs={"transaction_id": payload.cpm_trans_id},
+                countdown=0  # Delay execution by 60 seconds
+            )
+    
+    return {
+        "status": "success",
+        "message": "Webhook verified",
+        "transaction_id": payload.cpm_trans_id,
+    }
+
+@router.get("/check-status/{transaction_id}")
+async def get_payment_status(
+    transaction_id: str,
+    payment : Annotated[User, Depends(get_payment_by_transaction)],
+    payment_service: PaymentService = Depends()
+):
+    if payment.status == PaymentStatusEnum.PENDING:
+        payment = await payment_service.check_payment_status(transaction_id)
         
-    # user_phone = await user_service.get_by_phone(user_phone=user_update_input.phone_number)
-    # if user_phone is not None and user_phone.id != user.id:
-        
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,            
-    #         detail=BaseOutFail(
-    #             message=ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.description,   
-    #             error_code= ErrorMessage.PHONE_NUMBER_ALREADY_TAKEN.value
-    #         ).model_dump()
-    #     )
-    
-    user = await user_service.update(user_id, user_update_input)
-    
-    return  {"data" : user, "message":"Users updated successfully" }
+    return {
+        "message" : "success",
+        "data": payment
+    }
 
-
-
-@router.get('/setup-users',tags=["Users"])
-async def setup_users(user_service: UserService = Depends()):
-    await user_service.permission_set_up()
-    
-    return  {"data" : "Users setup successfully" }
-
-
-@router.get('/test-get-data-to-redis',tags=["Test"])
-async def get_data_redis(test_number : int):
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
-
-    return  {"message" : "no data" }
-    
-@router.get('/test-add-data-to-redis',tags=["Test"])
-async def add_data_redis(test_number : int):
-    await set_to_redis(
-                        f"test:{test_number}", f"test:{test_number}", ex=60
-                    ) 
-    cached = await get_from_redis(f"test:{test_number}")
-    if cached:
-        return  {"data" : cached }
-
-    return  {"message" : "npo data found after add" }
-
-@router.get('/test-send-email',tags=["Test"])
-async def test_email(email : str):
-    
-    data = {
-            "to_email" : email,
-            "subject":"Email Validation",
-            "template_name":"verify_email.html" ,
-            "lang":"en",
-            "context":{
-                    "code":"AZERTY",
-                    "time": 30
-                } 
-        } 
-    NotificationHelper.send_smtp_email(data=data)
-
-    return  {"message" : "email send" }
-
-# @router.delete("/{user_id}")
-# async def delete_user(
-#     user_id: str,
-#     user_service: UserService = Depends(),
-#     user: Mapping = Depends(get_user),
-# ):
-#     user = user_service.delete(user_id)
-#     return user    

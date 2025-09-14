@@ -167,8 +167,15 @@ class JobApplicationOut(BaseModel):
     date_of_birth: Optional[date]
     created_at: datetime
     updated_at: datetime
-    
 
+class InitPaymentOut(BaseModel):
+    amount : float
+    payment_link : Optional[str]
+    transaction_id : Optional[str]
+
+class PaymentJobApplicationOut(BaseModel):
+    job_application  : JobApplicationOut
+    payment : InitPaymentOut
 
 class JobApplicationFilter(BaseModel):
     page: int = Field(1, ge=1)
@@ -187,6 +194,8 @@ class JobOfferOutSuccess(BaseOutSuccess):
 class JobOffersPageOutSuccess(BaseOutPage):
     data: List[JobOfferOut]
 
+class PaymentJobApplicationOutSuccess(BaseOutSuccess):
+    data: PaymentJobApplicationOut
 
 class JobApplicationOutSuccess(BaseOutSuccess):
     data: JobApplicationOut

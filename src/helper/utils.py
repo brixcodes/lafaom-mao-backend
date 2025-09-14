@@ -18,6 +18,8 @@ push_service = FCMNotification(
 
 env = Environment(loader=FileSystemLoader('src/templates'))
 
+
+
 class NotificationHelper :
     @staticmethod
     @shared_task  

@@ -3,6 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
 
 from src.api.auth.utils import check_permissions
+from src.api.payments.schemas import PaymentInitInput
+from src.api.payments.service import PaymentService
 from src.api.user.models import PermissionEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 
@@ -23,6 +25,7 @@ from src.api.job_offers.schemas import (
     JobApplicationFilter,
     JobAttachmentOutSuccess,
     JobAttachmentListOutSuccess,
+    PaymentJobApplicationOutSuccess,
     UpdateJobOfferStatusInput,
 )
 from src.api.job_offers.dependencies import get_job_offer, get_job_application, get_job_attachment
@@ -129,10 +132,11 @@ async def change_job_application_status(
     application = await job_offer_service.change_job_application_status(application=application, input=input)
     return {"message": "Job application fetched successfully", "data": application}
 
-@router.post("/job-applications", response_model=JobApplicationOutSuccess, tags=["Job Application"])
+@router.post("/job-applications", response_model=PaymentJobApplicationOutSuccess, tags=["Job Application"])
 async def create_job_application(
     input: JobApplicationCreateInput,
     job_offer_service: JobOfferService = Depends(),
+    payment_service: PaymentService = Depends()
 ):
     
     # Verify job offer exists
@@ -168,7 +172,33 @@ async def create_job_application(
             )
     
     application = await job_offer_service.create_job_application(job_offer=job_offer, data=input)
-    return {"message": "Job application created successfully", "data": application}
+    
+    payment_input = PaymentInitInput(
+        payable=application,
+        amount=job_offer.submission_fee,
+        product_currency=job_offer.currency,
+        description= "Payment for job application fee of " + job_offer.title,
+        payment_provider="CINETPAY"
+        
+    )
+    payment = await payment_service.initiate_payment(payment_input)
+    
+    if payment["message"] =="failed":
+        await job_offer_service.delete_job_application(application)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
+            ).model_dump(),
+        )
+    
+    await job_offer_service.send_application_confirmation_email(application)
+    
+    return {"message": "Job application created successfully", "data": {
+        "job_application": application,
+        "payment": payment
+    }}
 
 @router.get("/job-applications/{application_id}", response_model=JobApplicationOutSuccess, tags=["Job Application"])
 async def get_job_application_route(

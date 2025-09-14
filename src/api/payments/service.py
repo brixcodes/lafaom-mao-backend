@@ -1,300 +1,241 @@
-from typing import List
+
+import asyncio
+import math
+from celery import shared_task
 from fastapi import Depends
-from src.database import get_session_async
-from src.api.user.models import (DeviceType, NotificationChannel, PermissionEnum, User, UserPermission, UserRole, Role, RoleEnum, UserStatusEnum)
-from src.api.auth.schemas import UpdateDeviceInput, UpdateUserInput, UpdateAccountSettingInput
-from sqlmodel import select, or_
+import httpx
+from sqlmodel import select
+from src.config import settings
+from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
+from src.api.payments.schemas import CinetPayInit, PaymentInitInput
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
-import re
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from src.database import get_session, get_session_async
 
 
-class UserService:
+class PaymentService:
+    
+    def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
+        self.session = session
+        
+    @staticmethod
+    def round_up_to_nearest_5(x: float) -> int:
+        return int(math.ceil(x / 5.0)) * 5
+    async def get_currency_rates(self, from_currency: str, to_currencies: list[str] = None):
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "apikey": settings.CURRENCY_API_KEY
+            }
+            symbols = ",".join(to_currencies) if to_currencies else None
+            params = {"source": from_currency}
+            if symbols:
+                params["currencies"] = symbols
+
+            response = await client.get(f"{settings.CURRENCY_API_URL}", headers=headers, params=params)
+            data = response.json()
+            
+            print(data,params)
+            return data['quotes']
+
+
+    async def initiate_payment(self, payment_data: PaymentInitInput):
+        
+        if payment_data.payment_provider == "CINETPAY":
+            payment_currency = "XOF"
+        else :
+            payment_currency = payment_data.product_currency
+
+        quota =  await self.get_currency_rates(payment_data.product_currency, [payment_currency])
+        product_currency_to_payment_currency_rate = quota[f"{payment_data.product_currency}{payment_currency}"]  
+        
+        quota =  await self.get_currency_rates("USD",[payment_currency,payment_data.product_currency])
+        usd_to_payment_currency_rate = quota[f"USD{payment_currency}"]
+        usd_to_product_currency_rate = quota[f"USD{payment_data.product_currency}"]
+        
+
+        payment = Payment(
+            transaction_id=str(uuid.uuid4()),
+            product_amount=payment_data.amount,
+            product_currency=payment_data.product_currency,
+            payment_currency=payment_currency,
+            daily_rate=product_currency_to_payment_currency_rate,
+            usd_product_currency_rate=usd_to_product_currency_rate,
+            usd_payment_currency_rate=usd_to_payment_currency_rate,
+            status=PaymentStatusEnum.PENDING,
+            payable_id=payment_data.payable.id,
+            payable_type=payment_data.payable.__class__.__name__
+        )
+        
+        cinetpay_data = CinetPayInit(
+            transaction_id=payment.transaction_id,
+            amount= PaymentService.round_up_to_nearest_5(payment_data.amount * product_currency_to_payment_currency_rate),
+            currency=payment_currency,
+            description=payment_data.description,
+            meta=f"{payment_data.payable.__class__.__name__}-{payment_data.payable.id}",
+            invoice_data={
+                    "payable": payment.payable_type,
+                    "payable_id": payment.payable_id
+                }
+        )
+        
+        cinetpay_client = CinetPayService(self.session)
+        
+        try:
+            cinetpay_payment = await cinetpay_client.initiate_cinetpay_payment( cinetpay_data)
+        except Exception as e:
+            return {
+                "message": "failed",
+                "amount": payment_data.amount,
+                "payment_link": None
+            }
+        
+        payment.payment_type_id = cinetpay_payment.transaction_id
+        payment.payment_type = cinetpay_payment.__class__.__name__
+        
+        self.session.add(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
+        
+        return {
+            "message": "success",
+            "amount" : payment_data.amount,
+            "payment_link": cinetpay_payment.payment_url
+        }
+        
+    async def get_payment_by_id(self, payment_id: str):
+        statement = select(Payment).where(Payment.id == payment_id)
+        result = await self.session.execute(statement)
+        payment = result.scalars().one()
+        return payment
+    
+    async def get_payment_by_transaction_id(self, transaction_id: str):
+        statement = select(Payment).where(Payment.payment_type_id == transaction_id)
+        result = await self.session.execute(statement)
+        payment = result.scalars().one()
+        return payment
+
+    async def check_payment_status(self, payment : Payment):
+        if payment.payment_type == "CinetPayPayment":
+            
+            cinetpay_client = CinetPayService(self.session)
+            cinetpay_payment = await cinetpay_client.get_cinetpay_payment(payment.transaction_id)
+            
+            if cinetpay_payment is None:
+                payment.status = PaymentStatusEnum.ERROR
+                await self.session.commit()
+                await self.session.refresh(payment)
+            else :
+                result = await  CinetPayService.check_cinetpay_payment_status(payment.transaction_id)
+                if result["data"]["status"] == "ACCEPTED":
+                    payment.status = PaymentStatusEnum.ACCEPTED
+                    cinetpay_payment.status = PaymentStatusEnum.ACCEPTED
+                    cinetpay_payment.amount_received = ["data"]["amount"]
+                elif result["data"]["status"] == "REFUSED":
+                    payment.status = PaymentStatusEnum.REFUSED
+                    cinetpay_payment.status = PaymentStatusEnum.REFUSED
+                
+                await self.session.commit()
+                await self.session.refresh(payment)
+                await self.session.refresh(cinetpay_payment)
+
+        return payment
+    
+    @staticmethod
+    @shared_task
+    async def check_cash_in_status(transaction_id : str ) -> dict :
+        
+        async def _check():
+            async for session in get_session():
+                payment_service = PaymentService(session=session)
+
+                payment = await payment_service.get_payment_by_transaction_id(transaction_id)
+                if payment is None:
+                    return {
+                        "message": "failed",
+                        "data": None,
+                    }
+
+                if payment.status == PaymentStatusEnum.PENDING:
+                    # Assuming this is async too
+                    payment = await payment_service.check_payment_status(transaction_id)
+
+                return {
+                    "message": "success",
+                    "data": payment,
+                }
+
+        return asyncio.run(_check())
+        
+        
+                
+
+class CinetPayService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
         self.session = session
 
-    async def get(self):
-        statement = select(User)
-        result = await self.session.execute(statement)
-        users = result.scalars().all()
-        return users
 
-    async def create(self, user_create_input, password_hash: bool = False):
-        if not password_hash:
-            user_create_input.password = pwd_context.hash(user_create_input.password)
-        user = User(**user_create_input.model_dump())
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
+    async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
 
-    async def get_by_id(self, user_id: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
+        payload = {
+            "amount": payment_data.amount,
+            "currency": payment_data.currency,
+            "description": payment_data.description,
+            "apikey": settings.CINETPAY_API_KEY,
+            "site_id": settings.CINETPAY_SITE_ID,
+            "transaction_id": payment_data.transaction_id,
+            "channels": "MOBILE_MONEY",
+            "return_url": settings.CINETPAY_RETURN_URL,
+            "notify_url": settings.CINETPAY_NOTIFY_URL,
+            "meta":payment_data.meta,
+            "invoice_data": payment_data.invoice_data
+        }
 
+        async with httpx.AsyncClient() as client:
+            response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
+            
+            print(response.json(),payload)
+            response.raise_for_status()
+            data = response.json()
 
-    async def get_by_email(self, user_email: str):
-        statement = select(User).where(User.email == user_email)
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
-
-    async def get_by_account(self, account: str):
-        statement = select(User).where(
-            or_(User.email == account, User.phone_number == account)
-        )
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
-
-    async def get_by_phone(self, user_phone: str):
-        statement = select(User).where(User.phone_number == user_phone)
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-        return user
-    
-    
-    async def get_users_by_id_lists(self, user_ids: List[str]):
-        statement = select(User).where(
-            User.id.in_(user_ids)
-        )
-        result = await self.session.execute(statement)
-        users = result.scalars().all()
-        return users
-
-    async def update(self, user_id, user_update_input):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        for key, value in user_update_input.dict().items():
-            setattr(user, key, value)
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_password(self, user_id: str, password: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        user.password = pwd_context.hash(password)
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_profile_image(self, user_id: str, picture: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        user.picture = picture
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_account_setting(self, user_id: str, input: UpdateAccountSettingInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        if input.prefer_notification is not None:
-            user.prefer_notification = input.prefer_notification
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_phone_or_email(self, user_id: str, account: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'  # Simple regex for email validation
-
-        if not re.match(email_regex, account):
-            user.phone_number = account
-        else:
-            user.email = account
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-
-    async def update_profile(self, user_id: str, input: UpdateUserInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-
-        user.first_name = input.first_name
-        user.last_name = input.last_name
-        user.country_code = input.country_code
-        user.lang = input.lang
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-    
-    async def update_device_id(self, user_id: str,device_type : str , input: UpdateDeviceInput):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        
-        if device_type == DeviceType.ANDROID:
-            user.android_token = input.device_id
-        elif device_type == DeviceType.IOS:
-            user.ios_token = input.device_id
-        elif device_type == DeviceType.WEB:
-            user.web_token = input.device_id
-
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-    
-
-    
-
-    async def delete_user(self, user_id: str):
-        statement = select(User).where(User.id == user_id)
-        result = await self.session.execute(statement)
-        user = result.scalars().one()
-        await self.session.delete(user)
-        await self.session.commit()
-        return user
-
-
-
-    async def permission_set_up(self):
-        statement = select(User).where(User.email == "admin@laakam.com")
-        result = await self.session.execute(statement)
-        user = result.scalars().first()
-
-        if user is None:
-            user = User(
-                first_name="admin",
-                last_name="admin",
-                country_code="CM",
-                email="admin@laakam.com",
-                phone_number="0000000000",
-                lang="en",
-                status=UserStatusEnum.ACTIVE,
-                prefer_notification=NotificationChannel.EMAIL,
-                password=pwd_context.hash("admin")
-            )
-            self.session.add(user)
-            await self.session.commit()
-            await self.session.refresh(user)
-
-        admin = None
-        for role in RoleEnum:
-            statement = select(Role).where(Role.name == role.value)
-            result = await self.session.execute(statement)
-            role_data = result.scalars().first()
-            if role_data is None:
-                role_data = Role(name=role)
-                self.session.add(role_data)
-
-            if role_data.name == RoleEnum.ADMIN:
-                admin = role_data
-
-        await self.session.commit()
-        await self.session.refresh(admin)
-
-        if admin is not None:
-            for permission in PermissionEnum:
-                statement = (
-                    select(UserPermission).where(UserPermission.role_id == admin.id)
-                    .where(UserPermission.permission == permission.value)
+            if data["code"] == "201":
+                payment_link = data["data"]["payment_url"]
+                
+                db_payment = CinetPayPayment(
+                    
+                    transaction_id=payment_data.transaction_id,
+                    amount=payment_data.amount,
+                    currency=payment_data.currency,
+                    status="PENDING",
+                    payment_link=payment_link,
+                    payment_url=data["data"]["payment_url"],
+                    payment_token=data["data"]["payment_token"],
+                    api_response_id=data["api_response_id"]
                 )
-                result = await self.session.execute(statement)
-                user_permission = result.scalars().first()
-                if user_permission is None:
-                    user_permission = UserPermission(
-                        role_id=admin.id,
-                        permission=permission.value
-                    )
-                    self.session.add(user_permission)
 
-        await self.session.commit()
+                self.session.add(db_payment)
+                await self.session.commit()
+                await self.session.refresh(db_payment)
+                return db_payment
+            else:
+                print(data["message"])
+                raise Exception(data["message"])
 
-        statement = select(UserRole).where(UserRole.user_id == user.id).where(UserRole.role_id == admin.id)
-        result = await self.session.execute(statement)
-        user_role = result.scalars().first()
+    @staticmethod
+    async def check_cinetpay_payment_status(transaction_id: str):
+        payload = {
+            "apikey": settings.CINETPAY_API_KEY,
+            "site_id": settings.CINETPAY_SITE_ID,
+            "transaction_id": transaction_id
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post("https://api-checkout.cinetpay.com/v2/payment/check", json=payload)
+            response.raise_for_status()
+            return response.json()
 
-        if user_role is None:
-            user_role = UserRole(
-                user_id=user.id,
-                role_id=admin.id
-            )
-            self.session.add(user_role)
-
-            await self.session.commit()
-
-        return True
-
-    async def has_all_permissions(self,user_id :str, permissions : list = []) -> bool: 
-        statement = select(UserRole.role_id).where(UserRole.user_id == user_id)
+    async def get_cinetpay_payment(self, transaction_id: str):
+        statement = select(CinetPayPayment).where(CinetPayPayment.transaction_id == transaction_id)
+        cinetpay_payment = await self.session.execute(statement)
         
-        roles_result = await self.session.execute(statement)
-        roles = roles_result.scalars().all()
-        
-        statement = (select(UserPermission).where(UserPermission.user_id == user_id or UserPermission.role_id.in_(roles))
-                        .where(UserPermission.permission.in_(permissions)))
-        
-        
-        values_result = await self.session.execute(statement)
-        values = values_result.all()
-        
-        if len(values) == len(permissions) :
-            return True
-        
-        return False 
+        return cinetpay_payment.scalars().first()
     
-    async def has_any_permissions(self,user_id :str,  permissions : list = []) -> bool: 
-        statement = select(UserRole.role_id).where(UserRole.user_id == user_id)
-        
-        roles_result = await self.session.execute(statement)
-        roles = roles_result.scalars().all()
-    
-    
-        
-        statement = (select(UserPermission).where(UserPermission.user_id == user_id or UserPermission.role_id.in_(roles))
-                        .where(UserPermission.permission.in_(permissions)))
-        
-        
-        values_result = await self.session.execute(statement)
-        values = values_result.all()
-        
-        if len(values)> 1 :
-            return True
-        
-        return False 
-    
-    def has_all_role(self,user_id :str, role : list = []) -> bool: 
-        
-        roles = self.roles
-        
-        for elt in roles :
-            if not (elt.name in role) :
-                return False
-        
-        return True
-    
-    def has_any_role(self,user_id :str, role : list = []) -> bool: 
-        
-        roles = self.roles
-        
-        for elt in roles :
-            if elt.name in role :
-                return True
-        
-        return False
 

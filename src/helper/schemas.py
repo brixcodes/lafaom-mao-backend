@@ -159,7 +159,18 @@ class ErrorMessage(Enum):
     
     JOB_ATTACHMENT_REQUIRED = ('job_attachment_required',"Job attachment is required")
     
+    PAYMENT_NOT_FOUND = ('payment_not_found',"Payment not found")
+    PAYMENT_ALREADY_EXISTS = ('payment_already_exists',"Payment already exists")
+    
+    PAYMENT_METHOD_NOT_FOUND = ('payment_method_not_found',"Payment method not found")
+    PAYMENT_METHOD_ALREADY_EXISTS = ('payment_method_already_exists',"Payment method already exists")
+    
+    PAYMENT_METHOD_TYPE_NOT_FOUND = ('payment_method_type_not_found',"Payment method type not found")
     
     CAN_NOT_DELETE_SUPER_ADMIN = ('can_not_delete_super_admin',"Can not delete super admin")
+    
+    PAYMENT_INITIATION_FAILED = ('payment_initiation_failed',"Payment initiation failed")
+    
+    
     def __str__(self):
         return self.value   

@@ -92,6 +92,15 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY : str = ""
     AWS_REGION : str = "us-east-1"
     AWS_BUCKET_NAME : str = "your-bucket-name"
+
+    ## Credential to connect to the CinetPay Server
+    CINETPAY_API_KEY: str | None = None
+    CINETPAY_SITE_ID: str | None = None
+    CINETPAY_NOTIFY_URL: str | None = None
+    CINETPAY_RETURN_URL: str | None = None
+    
+    CURRENCY_API_KEY : str | None = None
+    CURRENCY_API_URL: str | None = None
     
     ## The Redis Cache turn around time
     CACHE_TTL:int   = 3600

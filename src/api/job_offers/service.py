@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, HTTPException,status
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
@@ -139,10 +139,15 @@ class JobOfferService:
             await self.associate_job_attachment( attachment=attachment,application_id=job_application.id)
         
         
-        await self._send_application_confirmation_email(job_application)
-        
         return job_application
-
+    
+    async def delete_job_application(self, application: JobApplication) -> JobApplication:
+        
+        await self.dissociate_job_attachment(application_id=application.id)
+        
+        await self.session.delete(application)
+        await self.session.commit()
+        return application
 
     async def get_job_application_by_id(self, application_id: int) -> Optional[JobApplication]:
         statement = select(JobApplication).where(JobApplication.id == application_id, JobApplication.delete_at.is_(None))
@@ -220,6 +225,11 @@ class JobOfferService:
         await self.session.commit()
         await self.session.refresh(attachment)
         return attachment
+    
+    async def dissociate_job_attachment(self, application_id: int) -> None:
+        statement = update(JobAttachment).where(JobAttachment.application_id == application_id).values(application_id=None)
+        await self.session.execute(statement)
+        await self.session.commit()
 
     async def get_job_attachment_by_id(self, attachment_id: int) -> Optional[JobAttachment]:
         statement = select(JobAttachment).where(JobAttachment.id == attachment_id, JobAttachment.delete_at.is_(None))
@@ -373,7 +383,7 @@ class JobOfferService:
     
     
     # Private email methods
-    async def _send_application_confirmation_email(self, application: JobApplication):
+    async def send_application_confirmation_email(self, application: JobApplication):
         """Send confirmation email when job application is created"""
         # Get job offer details
         job_offer = await self.get_job_offer_by_id(application.job_offer_id)
