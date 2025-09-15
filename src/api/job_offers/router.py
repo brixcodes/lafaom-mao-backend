@@ -152,7 +152,7 @@ async def create_job_application(
         )
     
     
-    if job_offer.submission_deadline > date.today():
+    if job_offer.submission_deadline < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
