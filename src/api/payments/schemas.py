@@ -22,7 +22,7 @@ class CinetPayInit(BaseModel):
 
 class PaymentInitInput(BaseModel):
     payable: JobApplication 
-    amount: int
+    amount: float
     product_currency: str 
     description: str
     payment_provider: str = "CINETPAY"
