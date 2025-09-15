@@ -172,9 +172,11 @@ class JobApplicationOut(BaseModel):
     updated_at: datetime
 
 class InitPaymentOut(BaseModel):
+    payment_provider : str
     amount : float
+    transaction_id : str 
     payment_link : Optional[str] = None
-    transaction_id : Optional[str] = None
+    notify_url : Optional[str] = None
 
 class PaymentJobApplicationOut(BaseModel):
     job_application  : JobApplicationOut

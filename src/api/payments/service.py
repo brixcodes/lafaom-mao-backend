@@ -108,7 +108,10 @@ class PaymentService:
             return {
                 "message": "failed",
                 "amount": payment_data.amount,
-                "payment_link": None
+                "payment_link": None,
+                "transaction_id": None,
+                "payment_provider": payment_data.payment_provider,
+                "notify_url": settings.CINETPAY_NOTIFY_URL
             }
         
         payment.payment_type_id = str(cinetpay_payment.transaction_id)
@@ -120,9 +123,11 @@ class PaymentService:
         
         return {
             "message": "success",
+            "payment_provider": payment_data.payment_provider,
             "amount" : payment_data.amount,
             "payment_link": cinetpay_payment.payment_url,
-            "transaction_id": cinetpay_payment.transaction_id   
+            "transaction_id": cinetpay_payment.transaction_id,
+            "notify_url": settings.CINETPAY_NOTIFY_URL
         }
         
     async def get_payment_by_id(self, payment_id: str):
