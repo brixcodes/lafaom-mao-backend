@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Form, HTTPException, Header
 from src.api.payments.dependencies import get_payment_by_transaction
 from src.api.payments.models import PaymentStatusEnum
 from src.api.payments.service import PaymentService 
@@ -23,7 +23,7 @@ router = APIRouter()
 @router.post("/cinetpay/notify")
 async def cinetpay_webhook_handler(
     
-    payload: WebhookPayload,
+    payload: Annotated[WebhookPayload, Form(...)],
     x_token: str = Header(..., alias="x-token")
     
 ):
