@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import sys
 from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
 
@@ -151,7 +152,7 @@ async def create_job_application(
         )
     
     
-    if job_offer.deadline < date.today():
+    if job_offer.submission_deadline > date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
@@ -178,10 +179,31 @@ async def create_job_application(
         amount=job_offer.submission_fee,
         product_currency=job_offer.currency,
         description= "Payment for job application fee of " + job_offer.title,
-        payment_provider="CINETPAY"
-        
+        payment_provider="CINETPAY",
+        customer_name=input.last_name,
+        customer_surname=input.first_name,
+        customer_email=input.email,
+        customer_phone_number=input.phone_number,
+        customer_address=input.address,
+        customer_city=input.city,
+        customer_country=input.country_code,
+        customer_state=input.country_code,
+        customer_zip_code="00000"
     )
-    payment = await payment_service.initiate_payment(payment_input)
+    
+    
+    try :
+        payment = await payment_service.initiate_payment(payment_input)
+    except Exception as e:
+        print(e.with_traceback(sys.exc_info()[2]))
+        await job_offer_service.delete_job_application(application)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
+            ).model_dump(),
+        )
     
     if payment["message"] =="failed":
         await job_offer_service.delete_job_application(application)

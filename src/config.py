@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     ## Credential to connect to the CinetPay Server
     CINETPAY_API_KEY: str | None = None
     CINETPAY_SITE_ID: str | None = None
+    CINETPAY_SECRET_KEY: str | None = None
     CINETPAY_NOTIFY_URL: str | None = None
     CINETPAY_RETURN_URL: str | None = None
     

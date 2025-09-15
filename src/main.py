@@ -49,7 +49,7 @@ app.include_router(auth_router, prefix=base_url + "/auth", tags=["Auth"])
 app.include_router(user_router, prefix=base_url )
 app.include_router(blog_router, prefix=base_url )
 app.include_router(job_offers_router, prefix=base_url )
-app.include_router(payments_router, prefix=base_url, tags=["Payments"])
+app.include_router(payments_router, prefix=base_url + "/payments", tags=["Payments"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

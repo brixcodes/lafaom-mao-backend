@@ -110,10 +110,11 @@ class JobApplicationCreateInput(BaseModel):
     last_name: str
     civility: Optional[str] = None
     country_code: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
     date_of_birth: Optional[date] = None
     attachments : Optional[List[JobAttachmentInput2]]=None
     
-
 
 
 class JobApplicationUpdateInput(BaseModel):
@@ -127,6 +128,8 @@ class JobApplicationUpdateByCandidateInput(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     civility: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
     attachments : Optional[List[JobAttachmentInput2]]
@@ -162,14 +165,16 @@ class JobApplicationOut(BaseModel):
     last_name: str
     civility: Optional[str]
     country_code: Optional[str]
+    city: Optional[str] = None
+    address: Optional[str] = None
     date_of_birth: Optional[date]
     created_at: datetime
     updated_at: datetime
 
 class InitPaymentOut(BaseModel):
     amount : float
-    payment_link : Optional[str]
-    transaction_id : Optional[str]
+    payment_link : Optional[str] = None
+    transaction_id : Optional[str] = None
 
 class PaymentJobApplicationOut(BaseModel):
     job_application  : JobApplicationOut

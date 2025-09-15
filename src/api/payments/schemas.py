@@ -10,6 +10,15 @@ class CinetPayInit(BaseModel):
     description: str
     invoice_data : dict
     meta :str
+    customer_name : Optional[str] = None
+    customer_surname :  Optional[str] = None
+    customer_email : Optional[str] = None
+    customer_phone_number : Optional[str] = None
+    customer_address : Optional[str] = None
+    customer_city : Optional[str] = None
+    customer_country : Optional[str] = None
+    customer_state : Optional[str] = None
+    customer_zip_code : Optional[str] = None
 
 class PaymentInitInput(BaseModel):
     payable: JobApplication 
@@ -17,6 +26,15 @@ class PaymentInitInput(BaseModel):
     product_currency: str 
     description: str
     payment_provider: str = "CINETPAY"
+    customer_name : Optional[str] = None
+    customer_surname :  Optional[str] = None
+    customer_email : Optional[str] = None
+    customer_phone_number : Optional[str] = None
+    customer_address : Optional[str] = None
+    customer_city : Optional[str] = None
+    customer_country : Optional[str] = None
+    customer_state : Optional[str] = None
+    customer_zip_code : Optional[str] = None
 
 class WebhookPayload(BaseModel):
     cpm_site_id: str

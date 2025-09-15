@@ -49,7 +49,7 @@ async def cinetpay_webhook_handler(
 
     
     generated_token = hmac.new(
-        settings.CINETPAY_API_KEY.encode("utf-8"),
+        settings.CINETPAY_SECRET_KEY.encode("utf-8"),
         data_string.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

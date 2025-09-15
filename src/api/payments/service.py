@@ -1,5 +1,6 @@
 
 import asyncio
+import json
 import math
 from celery import shared_task
 from fastapi import Depends
@@ -11,6 +12,7 @@ from src.api.payments.schemas import CinetPayInit, PaymentInitInput
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session, get_session_async
+from src.redis_client import get_from_redis, set_to_redis
 
 
 class PaymentService:
@@ -21,7 +23,16 @@ class PaymentService:
     @staticmethod
     def round_up_to_nearest_5(x: float) -> int:
         return int(math.ceil(x / 5.0)) * 5
+    
     async def get_currency_rates(self, from_currency: str, to_currencies: list[str] = None):
+        
+        cache_key = f"currency:{from_currency}:{','.join(to_currencies) if to_currencies else 'ALL'}"
+
+        # Check cache
+        cached = await get_from_redis(cache_key)
+        if cached:
+            return json.loads(cached)
+        
         async with httpx.AsyncClient() as client:
             headers = {
                 "apikey": settings.CURRENCY_API_KEY
@@ -30,18 +41,19 @@ class PaymentService:
             params = {"source": from_currency}
             if symbols:
                 params["currencies"] = symbols
-
+            #print(params,headers,settings.CURRENCY_API_URL)
             response = await client.get(f"{settings.CURRENCY_API_URL}", headers=headers, params=params)
             data = response.json()
-            
-            print(data,params)
-            return data['quotes']
+            rates = data['quotes']
+            #print(data,params)
+        await set_to_redis(cache_key, json.dumps(rates), ex=14400)
+        return rates
 
 
-    async def initiate_payment(self, payment_data: PaymentInitInput):
+    async def initiate_payment(self, payment_data: PaymentInitInput,is_swallow: bool = False):
         
         if payment_data.payment_provider == "CINETPAY":
-            payment_currency = "XOF"
+            payment_currency = "XAF"
         else :
             payment_currency = payment_data.product_currency
 
@@ -61,8 +73,8 @@ class PaymentService:
             daily_rate=product_currency_to_payment_currency_rate,
             usd_product_currency_rate=usd_to_product_currency_rate,
             usd_payment_currency_rate=usd_to_payment_currency_rate,
-            status=PaymentStatusEnum.PENDING,
-            payable_id=payment_data.payable.id,
+            status=PaymentStatusEnum.PENDING.value,
+            payable_id= str(payment_data.payable.id),
             payable_type=payment_data.payable.__class__.__name__
         )
         
@@ -75,13 +87,23 @@ class PaymentService:
             invoice_data={
                     "payable": payment.payable_type,
                     "payable_id": payment.payable_id
-                }
+                },
+            customer_name=payment_data.customer_name,
+            customer_surname=payment_data.customer_surname,
+            customer_email=payment_data.customer_email,
+            customer_phone_number=payment_data.customer_phone_number,
+            customer_address=payment_data.customer_address,
+            customer_city=payment_data.customer_city,
+            customer_country=payment_data.customer_country
         )
         
         cinetpay_client = CinetPayService(self.session)
         
         try:
-            cinetpay_payment = await cinetpay_client.initiate_cinetpay_payment( cinetpay_data)
+            if is_swallow:
+                cinetpay_payment = await cinetpay_client.initiate_cinetpay_swallow_payment(cinetpay_data)
+            else :
+                cinetpay_payment = await cinetpay_client.initiate_cinetpay_payment( cinetpay_data)
         except Exception as e:
             return {
                 "message": "failed",
@@ -89,7 +111,7 @@ class PaymentService:
                 "payment_link": None
             }
         
-        payment.payment_type_id = cinetpay_payment.transaction_id
+        payment.payment_type_id = str(cinetpay_payment.transaction_id)
         payment.payment_type = cinetpay_payment.__class__.__name__
         
         self.session.add(payment)
@@ -99,7 +121,8 @@ class PaymentService:
         return {
             "message": "success",
             "amount" : payment_data.amount,
-            "payment_link": cinetpay_payment.payment_url
+            "payment_link": cinetpay_payment.payment_url,
+            "transaction_id": cinetpay_payment.transaction_id   
         }
         
     async def get_payment_by_id(self, payment_id: str):
@@ -127,12 +150,12 @@ class PaymentService:
             else :
                 result = await  CinetPayService.check_cinetpay_payment_status(payment.transaction_id)
                 if result["data"]["status"] == "ACCEPTED":
-                    payment.status = PaymentStatusEnum.ACCEPTED
-                    cinetpay_payment.status = PaymentStatusEnum.ACCEPTED
-                    cinetpay_payment.amount_received = ["data"]["amount"]
+                    payment.status = PaymentStatusEnum.ACCEPTED.value
+                    cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
+                    cinetpay_payment.amount_received = result["data"]["amount"]
                 elif result["data"]["status"] == "REFUSED":
-                    payment.status = PaymentStatusEnum.REFUSED
-                    cinetpay_payment.status = PaymentStatusEnum.REFUSED
+                    payment.status = PaymentStatusEnum.REFUSED.value
+                    cinetpay_payment.status = PaymentStatusEnum.REFUSED.value
                 
                 await self.session.commit()
                 await self.session.refresh(payment)
@@ -165,9 +188,7 @@ class PaymentService:
                 }
 
         return asyncio.run(_check())
-        
-        
-                
+
 
 class CinetPayService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
@@ -183,12 +204,31 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "MOBILE_MONEY",
+            "channels": "ALL",
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
             "meta":payment_data.meta,
-            "invoice_data": payment_data.invoice_data
+            "invoice_data": payment_data.invoice_data,
         }
+        
+        if payment_data.customer_name:
+            payload["customer_name"] = payment_data.customer_name
+        if payment_data.customer_surname:
+            payload["customer_surname"] = payment_data.customer_surname
+        if payment_data.customer_email:
+            payload["customer_email"] = payment_data.customer_email
+        if payment_data.customer_phone_number:
+            payload["customer_phone_number"] = payment_data.customer_phone_number
+        if payment_data.customer_address:
+            payload["customer_address"] = payment_data.customer_address
+        if payment_data.customer_city:
+            payload["customer_city"] = payment_data.customer_city
+        if payment_data.customer_country:
+            payload["customer_country"] = payment_data.customer_country
+        if payment_data.customer_state:
+            payload["customer_state"] = payment_data.customer_state
+        if payment_data.customer_zip_code:
+            payload["customer_zip_code"] = payment_data.customer_zip_code
 
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
@@ -212,6 +252,7 @@ class CinetPayService:
                     api_response_id=data["api_response_id"]
                 )
 
+
                 self.session.add(db_payment)
                 await self.session.commit()
                 await self.session.refresh(db_payment)
@@ -219,6 +260,20 @@ class CinetPayService:
             else:
                 print(data["message"])
                 raise Exception(data["message"])
+
+    async def initiate_cinetpay_swallow_payment(self, payment_data: CinetPayInit):
+        db_payment = CinetPayPayment(
+                    
+                transaction_id=payment_data.transaction_id,
+                amount=payment_data.amount,
+                currency=payment_data.currency,
+                status="PENDING",
+            )
+
+        self.session.add(db_payment)
+        await self.session.commit()
+        await self.session.refresh(db_payment)
+        return db_payment
 
     @staticmethod
     async def check_cinetpay_payment_status(transaction_id: str):

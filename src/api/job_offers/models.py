@@ -71,6 +71,8 @@ class JobApplication(CustomBaseModel, table=True):
     first_name : str
     last_name : str
     civility : str | None = Field(nullable=True)
+    city : str | None = Field(nullable=True)
+    address : str | None = Field(nullable=True)
     country_code : str | None = Field(nullable=True)
     date_of_birth : Optional[date] = Field(nullable=True)
     
