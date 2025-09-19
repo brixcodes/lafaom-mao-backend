@@ -1,8 +1,9 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query ,status
 from src.api.auth.utils import check_permissions
+from src.api.training.services.specialty import SpecialtyService
 from src.api.user.models import PermissionEnum, User
-from src.api.training.service import TrainingService
+from src.api.training.services import TrainingService
 from src.api.training.schemas import (
     TrainingCreateInput,
     TrainingUpdateInput,
@@ -19,6 +20,7 @@ from src.api.training.dependencies import (
     get_training,
     get_training_session,
 )
+from src.helper.schemas import BaseOutFail, ErrorMessage
 
 router = APIRouter()
 
@@ -37,8 +39,17 @@ async def list_trainings(
 async def create_training(
     input: TrainingCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING]))],
-    training_service: TrainingService = Depends(),
+    training_service: TrainingService = Depends(),specialty_service: SpecialtyService = Depends(),
 ):
+    specialty = await specialty_service.get_specialty_by_id(input.specialty_id)
+    if specialty is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.SPECIALTY_NOT_FOUND.description,
+                error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
+            ).model_dump()
+        )
     training = await training_service.create_training(input)
     return {"message": "Training created successfully", "data": training}
 
@@ -57,8 +68,19 @@ async def update_training_route(
     input: TrainingUpdateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_TRAINING]))],
     training=Depends(get_training),
-    training_service: TrainingService = Depends(),
+    training_service: TrainingService = Depends(),specialty_service: SpecialtyService = Depends(),
 ):
+    if input.specialty_id is not None:
+        
+        specialty = await specialty_service.get_specialty_by_id(input.specialty_id)
+        if specialty is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.SPECIALTY_NOT_FOUND.description,
+                    error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
+                ).model_dump()
+        )
     training = await training_service.update_training(training, input)
     return {"message": "Training updated successfully", "data": training}
 
@@ -75,7 +97,7 @@ async def delete_training_route(
 
 
 # Training Sessions
-@router.get("/trainings/training-sessions", response_model=TrainingSessionsPageOutSuccess, tags=["Training Session"])
+@router.get("/training-sessions", response_model=TrainingSessionsPageOutSuccess, tags=["Training Session"])
 async def list_training_sessions(
     filters: Annotated[TrainingSessionFilter, Query(...)],
     training_service: TrainingService = Depends(),
@@ -84,17 +106,18 @@ async def list_training_sessions(
     return {"data": sessions, "page": filters.page, "number": len(sessions), "total_number": total}
 
 
-@router.post("/trainings/training-sessions", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
+@router.post("/training-sessions", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def create_training_session(
     input: TrainingSessionCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING_SESSION]))],
     training_service: TrainingService = Depends(),
 ):
+    
     session = await training_service.create_training_session(input)
     return {"message": "Training session created successfully", "data": session}
 
 
-@router.get("/trainings/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
+@router.get("/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def get_training_session_route(
     session_id: str,
     training_session=Depends(get_training_session),
@@ -102,7 +125,7 @@ async def get_training_session_route(
     return {"message": "Training session fetched successfully", "data": training_session}
 
 
-@router.put("/trainings/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
+@router.put("/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def update_training_session_route(
     session_id: str,
     input: TrainingSessionUpdateInput,
@@ -114,7 +137,7 @@ async def update_training_session_route(
     return {"message": "Training session updated successfully", "data": training_session}
 
 
-@router.delete("/trainings/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
+@router.delete("/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def delete_training_session_route(
     session_id: str,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_TRAINING_SESSION]))],

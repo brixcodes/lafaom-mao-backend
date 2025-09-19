@@ -1,7 +1,8 @@
+import sys
 from typing import List, Optional, Tuple
-from datetime import datetime, timezone
-from fastapi import Depends
-from sqlalchemy import func, update
+from datetime import date, datetime, timezone
+from fastapi import Depends, HTTPException ,status
+from sqlalchemy import func, update ,cast ,String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
@@ -14,7 +15,8 @@ from src.api.training.models import (
     TrainingSessionParticipant,
     Training,
 )
-from src.api.training.schemas.student_application import (
+from src.api.training.schemas import (
+    ChangeStudentApplicationStatusInput,
     StudentApplicationCreateInput,
     StudentApplicationFilter,
     StudentAttachmentInput,
@@ -28,6 +30,7 @@ from src.config import settings
 from src.helper.file_helper import FileHelper
 from src.helper.moodle import MoodleService
 from src.helper.notifications import SendPasswordNotification
+from src.helper.schemas import BaseOutFail, ErrorMessage
 
 try:
     from src.helper.moodle import (
@@ -78,23 +81,46 @@ class StudentApplicationService:
                 name=user.full_name(),
                 password=default_password
             ).send_notification()  
-
-        # Validate target session when provided
-        if data.target_session_id is not None:
-            session_stmt = select(TrainingSession).where(TrainingSession.id == data.target_session_id)
-            session_res = await self.session.execute(session_stmt)
-            target_session = session_res.scalars().first()
-            if target_session is None:
-                raise ValueError("SESSION_NOT_FOUND")
-            from datetime import date as _date
-            if target_session.registration_deadline < _date.today():
-                raise ValueError("SESSION_REGISTRATION_CLOSED")
-            if target_session.status != "OPEN_FOR_REGISTRATION":
-                raise ValueError("SESSION_NOT_OPEN")
-            if target_session.available_slots is not None and target_session.available_slots <= 0:
-                raise ValueError("SESSION_NO_SLOTS")
-        else:
-            raise ValueError("TARGET_SESSION_ID_REQUIRED")
+            
+        session_stmt = select(TrainingSession).where(TrainingSession.id == data.target_session_id)
+        session_res = await self.session.execute(session_stmt)
+        target_session = session_res.scalars().first()
+        
+        if target_session is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.TRAINING_SESSION_NOT_FOUND.description,
+                    error_code=ErrorMessage.TRAINING_SESSION_NOT_FOUND.value
+                ).model_dump()
+            )
+            
+        if target_session.registration_deadline < date.today():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.REGISTRATION_CLOSED.description,
+                    error_code=ErrorMessage.REGISTRATION_CLOSED.value
+                ).model_dump()
+            )
+            
+        if target_session.status != "OPEN_FOR_REGISTRATION":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.SESSION_NOT_OPEN.description,
+                    error_code=ErrorMessage.SESSION_NOT_OPEN.value
+                ).model_dump()
+            )
+            
+        if target_session.available_slots is not None and target_session.available_slots <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.NO_AVAILABLE_SLOTS.description,
+                    error_code=ErrorMessage.NO_AVAILABLE_SLOTS.value
+                ).model_dump()
+            )
 
         # Generate application number
         training_id = target_session.training_id
@@ -116,7 +142,7 @@ class StudentApplicationService:
         await self.session.commit()
         await self.session.refresh(application)
         return application
-  
+    
     async def update_student_application(self, application: StudentApplication, data) -> StudentApplication:
         """Update student application"""
         for key, value in data.model_dump(exclude_none=True).items():
@@ -152,7 +178,17 @@ class StudentApplicationService:
             description=f"Payment for training application fee of session {target_session.id}",
             payment_provider="CINETPAY",
         )
-        payment = await payment_service.initiate_payment(payment_input)
+        try :
+            payment = await payment_service.initiate_payment(payment_input)
+        except Exception as e:
+            print(e.with_traceback(sys.exc_info()[2]))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                    error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
+                ).model_dump(),
+            )
         return payment
 
     async def get_student_application_by_id(self, application_id: int) -> Optional[StudentApplication]:
@@ -160,12 +196,34 @@ class StudentApplicationService:
         statement = select(StudentApplication).where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
         result = await self.session.execute(statement)
         return result.scalars().first()
+    
+    async def get_student_application_by_user_id_and_training_session(self, email: str, training_session_id: str) -> Optional[StudentApplication]:
+        """Get student application by ID"""
+        statement = (
+            select(StudentApplication).join(User, User.id == StudentApplication.user_id)
+            .where(User.email == email)
+            .where( StudentApplication.target_session_id == training_session_id,  StudentApplication.delete_at.is_(None)))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
 
+    async def get_student_application_by_application_number(self, application_number: str,user_id : Optional[str]) -> Optional[StudentApplication]:
+        """Get student application by ID"""
+        statement = (
+            select(StudentApplication)
+            .where( StudentApplication.application_number == application_number,  StudentApplication.delete_at.is_(None)))
+        
+        if user_id :
+            statement = statement.where(StudentApplication.user_id ==user_id )
+        
+        result = await self.session.execute(statement)  
+        return result.scalars().first()
     async def get_full_student_application_by_id(self, application_id: int, user_id: Optional[str] = None) -> Optional[StudentApplication]:
         """Get full student application by ID with relationships"""
         statement = (
             select(StudentApplication)
             .where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
+            .options(selectinload(StudentApplication.training))
+            .options(selectinload(StudentApplication.training_session))
             .options(selectinload(StudentApplication.attachments))
         )
         
@@ -190,9 +248,11 @@ class StudentApplicationService:
                 StudentApplication.created_at,
                 StudentApplication.updated_at,
                 StudentApplication.training_id,
+                StudentApplication.payment_id,
                 Training.title.label("training_title"),
                 TrainingSession.start_date.label("training_session_start_date"),
                 TrainingSession.end_date.label("training_session_end_date"),
+                StudentApplication.user_id,
                 User.email.label("user_email"),
                 User.first_name.label("user_first_name"),
                 User.last_name.label("user_last_name"),
@@ -200,8 +260,6 @@ class StudentApplicationService:
             .join(User, User.id == StudentApplication.user_id)
             .join(Training, Training.id == StudentApplication.training_id)
             .join(TrainingSession, TrainingSession.id == StudentApplication.target_session_id)
-            .join(Payment, Payment.payable_id == StudentApplication.id)
-            .where(Payment.payment_type == StudentApplication.__class__.__name__)
             .where(StudentApplication.delete_at.is_(None))
         )
         
@@ -210,8 +268,6 @@ class StudentApplicationService:
             .join(User, User.id == StudentApplication.user_id)
             .join(Training, Training.id == StudentApplication.training_id)         
             .join(TrainingSession, TrainingSession.id == StudentApplication.target_session_id)
-            .join(Payment, Payment.payable_id == StudentApplication.id)
-            .where(Payment.payment_type == StudentApplication.__class__.__name__)
             .where(StudentApplication.delete_at.is_(None))
         )
         
@@ -219,9 +275,6 @@ class StudentApplicationService:
             statement = statement.where(StudentApplication.user_id == user_id)
             count_query = count_query.where(StudentApplication.user_id == user_id)
         
-        if filters.is_paid is not None and filters.is_paid == True:
-            statement = statement.where(Payment.status == PaymentStatusEnum.ACCEPTED)
-            count_query = count_query.where(Payment.status ==  PaymentStatusEnum.ACCEPTED)
 
         if filters.search is not None:
             like_clause = or_(
@@ -252,7 +305,7 @@ class StudentApplicationService:
 
         statement = statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
         result = await self.session.execute(statement)
-        return result.scalars().all(), total_count
+        return result.all(), total_count
     
     async def delete_student_application(self, application: StudentApplication) -> StudentApplication:
         """Delete student application"""
@@ -372,3 +425,14 @@ class StudentApplicationService:
         self.session.delete(attachment)
         await self.session.commit()
         return attachment
+    
+    
+    async def change_student_application_status(self, student_application : StudentApplication,input : ChangeStudentApplicationStatusInput):
+        student_application.refusal_reason = input.reason
+        student_application.status = input.status
+        
+        await self.session.commit()
+        await self.session.refresh(student_application)
+        
+        return student_application
+        

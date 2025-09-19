@@ -1,8 +1,9 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query ,status
 from src.api.auth.utils import check_permissions, get_current_active_user
+from src.api.training.services.student_application import StudentApplicationService
 from src.api.user.models import PermissionEnum, User
-from src.api.training.service import TrainingService
+from src.api.training.services import ReclamationService
 from src.api.training.schemas import (
     ReclamationCreateInput,
     ReclamationAdminUpdateInput,
@@ -17,6 +18,7 @@ from src.api.training.dependencies import (
     get_reclamation,
     get_user_reclamation,
 )
+from src.helper.schemas import BaseOutFail, ErrorMessage
 
 router = APIRouter()
 
@@ -25,11 +27,22 @@ router = APIRouter()
 async def create_my_reclamation(
     input: ReclamationCreateInput,
     current_user: Annotated[User, Depends(get_current_active_user)],
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
+    student_app_service: StudentApplicationService = Depends(),
 ):
     """Create a new reclamation by user"""
     # TODO: Validate that application_number belongs to current user
-    reclamation = await training_service.create_reclamation(input, user_id=current_user.id)
+    application = await student_app_service.get_student_application_by_application_number(input.application_number,current_user.id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.STUDENT_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.STUDENT_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
+        
+    reclamation = await reclamation_service.create_reclamation(input, user_id=current_user.id)
     return {"message": "Reclamation created successfully", "data": reclamation}
 
 
@@ -37,10 +50,10 @@ async def create_my_reclamation(
 async def list_my_reclamations(
     filters: Annotated[ReclamationFilter, Query(...)],
     current_user: Annotated[User, Depends(get_current_active_user)],
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Get paginated list of user's own reclamations"""
-    reclamations, total = await training_service.list_user_reclamations(current_user.id, filters)
+    reclamations, total = await reclamation_service.list_user_reclamations(current_user.id, filters)
     return {
         "data": reclamations,
         "page": filters.page,
@@ -54,9 +67,18 @@ async def list_my_reclamations(
 async def get_my_reclamation(
     reclamation_id: int,
     current_user: Annotated[User, Depends(get_current_active_user)],
-    reclamation=Depends(get_user_reclamation),
+    reclamation_service: ReclamationService = Depends(),
 ):
-    """Get user's own reclamation by ID"""
+    reclamation = await reclamation_service.get_reclamation_by_id(reclamation_id, user_id=current_user.id)
+    if reclamation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Reclamation not found",
+                error_code="RECLAMATION_NOT_FOUND",
+            ).model_dump(),
+        )
+    
     return {"message": "Reclamation fetched successfully", "data": reclamation}
 
 
@@ -65,10 +87,10 @@ async def get_my_reclamation(
 async def list_all_reclamations_admin(
     filters: Annotated[ReclamationFilter, Query(...)],
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_STUDENT_APPLICATION]))],
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Get paginated list of all reclamations (admin)"""
-    reclamations, total = await training_service.list_all_reclamations(filters)
+    reclamations, total = await reclamation_service.list_all_reclamations(filters)
     return {
         "data": reclamations,
         "page": filters.page,
@@ -94,10 +116,10 @@ async def update_reclamation_status(
     input: ReclamationAdminUpdateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CHANGE_STUDENT_APPLICATION_STATUS]))],
     reclamation=Depends(get_reclamation),
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Update reclamation status and assign admin (admin)"""
-    reclamation = await training_service.update_reclamation_status(reclamation, input)
+    reclamation = await reclamation_service.update_reclamation_status(reclamation, input)
     return {"message": "Reclamation status updated successfully", "data": reclamation}
 
 
@@ -106,20 +128,20 @@ async def delete_reclamation_admin(
     reclamation_id: int,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_STUDENT_ATTACHMENT]))],
     reclamation=Depends(get_reclamation),
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Delete reclamation (admin)"""
-    reclamation = await training_service.delete_reclamation(reclamation)
+    reclamation = await reclamation_service.delete_reclamation(reclamation)
     return {"message": "Reclamation deleted successfully", "data": reclamation}
 
 
 # Reclamation Types Endpoints
 @router.get("/reclamation-types/active/all", response_model=ReclamationTypeListOutSuccess, tags=["Reclamation Types"])
 async def get_active_reclamation_types(
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Get all active reclamation types for dropdown lists"""
-    types = await training_service.get_all_reclamation_types()
+    types = await reclamation_service.get_all_reclamation_types()
     return {"data": types, "message": "Active reclamation types fetched successfully"}
 
 
@@ -127,8 +149,8 @@ async def get_active_reclamation_types(
 async def create_reclamation_type(
     input: ReclamationTypeCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING]))],
-    training_service: TrainingService = Depends(),
+    reclamation_service: ReclamationService = Depends(),
 ):
     """Create a new reclamation type (admin)"""
-    reclamation_type = await training_service.create_reclamation_type(input)
+    reclamation_type = await reclamation_service.create_reclamation_type(input)
     return {"message": "Reclamation type created successfully", "data": reclamation_type}

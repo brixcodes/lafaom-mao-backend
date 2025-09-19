@@ -172,17 +172,15 @@ class JobOfferService:
 
     async def list_job_applications(self, filters: JobApplicationFilter) -> Tuple[List[JobApplication], int]:
         statement = (
-            select()
+            select(JobApplication)
             .join(JobOffer, JobOffer.id == JobApplication.job_offer_id)
-            .join(Payment, Payment.payable_id == JobApplication.id)
-            .where(Payment.payable_type == JobApplication.__class__.__name__)
             .where(JobApplication.delete_at.is_(None))
         )
         count_query = select(func.count(JobApplication.id)).where(JobApplication.delete_at.is_(None))
         
         if filters.is_paid is not None and filters.is_paid == True:
-            statement = statement.where(Payment.status == PaymentStatusEnum.ACCEPTED)
-            count_query = count_query.where(Payment.status ==  PaymentStatusEnum.ACCEPTED)
+            statement = statement.where(JobApplication.payment_id == None)
+            count_query = count_query.where(JobApplication.status == None)
 
         if filters.search is not None:
             like_clause = or_(

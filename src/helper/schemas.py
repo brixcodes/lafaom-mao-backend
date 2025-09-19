@@ -178,6 +178,15 @@ class ErrorMessage(Enum):
     # Student Application Errors
     STUDENT_APPLICATION_NOT_FOUND = ('student_application_not_found',"Student application not found")
     STUDENT_ATTACHMENT_NOT_FOUND = ('student_attachment_not_found',"Student attachment not found")
+    SPECIALTY_NOT_FOUND = ('specialty_not_found',"Specialty not found")
+    
+    CANNOT_APPROVE_UNPAID_APPLICATION =("cannot_approve_unpaid_application","cannot approve unpaid application")
+    
+    REGISTRATION_CLOSED = ('registration_closed',"Registration is closed")
+    
+    NO_AVAILABLE_SLOTS = ('no_available_slots',"No available slots")
+    SESSION_NOT_OPEN = ('session_not_open',"Session is not open")
+
     
     
     def __str__(self):

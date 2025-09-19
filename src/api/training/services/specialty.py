@@ -7,7 +7,7 @@ from sqlmodel import select, or_
 
 from src.database import get_session_async
 from src.api.training.models import Specialty
-from src.api.training.schemas.specialty import (
+from src.api.training.schemas import (
     SpecialtyCreateInput,
     SpecialtyUpdateInput,
     SpecialtyFilter,

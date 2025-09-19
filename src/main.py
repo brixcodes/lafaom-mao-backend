@@ -8,7 +8,9 @@ from src.api.blog.router import router as blog_router
 from src.api.job_offers.router import router as job_offers_router
 from src.api.payments.router import router as payments_router
 from src.api.auth.router import router as auth_router
-from src.api.training.router import router as training_router
+from src.api.training.routers import router as training_router
+from src.api.system.router import router as system_router
+
 import firebase_admin
 from firebase_admin import credentials
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import sentry_sdk
 from src.celery_utils import create_celery
 from src.helper.schemas import BaseOutFail, ErrorMessage
+
 # Initialize Firebase Admin SDK
 if firebase_admin._apps:
     firebase_admin.delete_app(firebase_admin.get_app())
@@ -52,6 +55,7 @@ app.include_router(blog_router, prefix=base_url )
 app.include_router(job_offers_router, prefix=base_url )
 app.include_router(training_router, prefix=base_url )
 app.include_router(payments_router, prefix=base_url + "/payments", tags=["Payments"])
+app.include_router(system_router, prefix=base_url + "/system", tags=["System"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

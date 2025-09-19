@@ -130,6 +130,16 @@ async def change_job_application_status(
                 error_code=ErrorMessage.JOB_APPLICATION_NOT_FOUND.value,
             ).model_dump(),
         )
+    
+    if application.payment_id == None :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.CANNOT_APPROVE_UNPAID_APPLICATION.description,
+                error_code=ErrorMessage.CANNOT_APPROVE_UNPAID_APPLICATION.value,
+            ).model_dump(),
+        )
+    
     application = await job_offer_service.change_job_application_status(application=application, input=input)
     return {"message": "Job application fetched successfully", "data": application}
 

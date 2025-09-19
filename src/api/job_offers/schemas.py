@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import List, Optional, Literal
 from fastapi import UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from src.api.payments.schemas import InitPaymentOut
 from src.helper.schemas import BaseOutPage, BaseOutSuccess
 from src.api.job_offers.models import ApplicationStatusEnum
@@ -105,7 +105,7 @@ class JobAttachmentInput2(BaseModel):
 
 class JobApplicationCreateInput(BaseModel):
     job_offer_id: str
-    email: str
+    email: EmailStr
     phone_number: str
     first_name: str
     last_name: str
@@ -134,13 +134,13 @@ class JobApplicationUpdateByCandidateInput(BaseModel):
     country_code: Optional[str] = None
     date_of_birth: Optional[date] = None
     attachments : Optional[List[JobAttachmentInput2]]
-    email : str
+    email : EmailStr
     otp_code: str
 
 
 class JobApplicationOTPRequestInput(BaseModel):
     application_number: str
-    email: str
+    email: EmailStr
 
 
 class JobAttachmentOut(BaseModel):
@@ -160,6 +160,7 @@ class JobApplicationOut(BaseModel):
     refusal_reason: Optional[str]
     submission_fee: float
     currency: str
+    payment_id : Optional[str]
     email: str
     phone_number: str
     first_name: str

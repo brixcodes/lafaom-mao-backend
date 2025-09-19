@@ -154,21 +154,12 @@ async def read_organization_centers_internal(
     organizations = await org_service.get_organizations_by_id_list(org_ids=input.organization_center_ids)
     return {"data": organizations, "message": "Organization Centers list fetched successfully"}
 
-@router.get("/organization-centers/active/all", response_model=OrganizationCenterListOutSuccess, tags=["Organization Centers"])
-async def read_active_organization_centers(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    org_service: OrganizationCenterService = Depends()
-):
-    """Get all active organization centers"""
-    
-    organizations = await org_service.get_all_active()
-    return {"data": organizations, "message": "Active Organization Centers fetched successfully"}
+
 
 @router.get("/organization-centers/location/{country_code}", response_model=OrganizationCenterListOutSuccess, tags=["Organization Centers"])
 async def read_organization_centers_by_location(
     country_code: str,
     city: str = Query(None),
-    current_user: Annotated[User, Depends(get_current_active_user)],
     org_service: OrganizationCenterService = Depends()
 ):
     """Get organization centers by location"""
@@ -176,20 +167,3 @@ async def read_organization_centers_by_location(
     organizations = await org_service.get_by_location(country_code=country_code, city=city)
     return {"data": organizations, "message": "Organization Centers fetched successfully"}
 
-@router.get("/stats/organization-dashboard", tags=["Stats"])
-async def get_organization_dashboard_stats(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    org_service: OrganizationCenterService = Depends()
-):
-    """Get dashboard statistics for organization centers"""
-    
-    active_organizations = await org_service.get_all_active()
-    
-    return {
-        "data": {
-            "total_active_centers": len(active_organizations),
-            "centers_by_type": {},
-            "centers_by_location": {}
-        },
-        "message": "Organization dashboard stats fetched successfully"
-    }

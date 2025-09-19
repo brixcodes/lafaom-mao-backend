@@ -10,7 +10,7 @@ from src.api.training.models import (
     Training,
     TrainingSession,
 )
-from src.api.training.schemas.training import (
+from src.api.training.schemas import (
     TrainingCreateInput,
     TrainingUpdateInput,
     TrainingFilter,
@@ -101,6 +101,7 @@ class TrainingService:
     async def create_training_session(self, data: TrainingSessionCreateInput) -> TrainingSession:
         """Create a new training session"""
         session = TrainingSession(**data.model_dump(exclude_none=True))
+        
         self.session.add(session)
         await self.session.commit()
         await self.session.refresh(session)

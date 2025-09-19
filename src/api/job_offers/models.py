@@ -75,7 +75,7 @@ class JobApplication(CustomBaseModel, table=True):
     address : str | None = Field(nullable=True)
     country_code : str | None = Field(nullable=True)
     date_of_birth : Optional[date] = Field(nullable=True)
-    
+    payment_id : Optional[str] = Field(default=None,foreign_key="payments.id", nullable=True)
     job_offer: JobOffer = Relationship()
     
     attachments: List["JobAttachment"] = Relationship( sa_relationship_kwargs={"cascade": "all, delete-orphan"})

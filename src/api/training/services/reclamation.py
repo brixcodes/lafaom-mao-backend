@@ -12,7 +12,7 @@ from src.api.training.models import (
     ReclamationStatusEnum,
     StudentApplication,
 )
-from src.api.training.schemas.reclamation import (
+from src.api.training.schemas import (
     ReclamationCreateInput,
     ReclamationFilter,
     ReclamationAdminUpdateInput,
@@ -71,6 +71,7 @@ class ReclamationService:
             .join(StudentApplication, StudentApplication.application_number == Reclamation.application_number)
             .where(StudentApplication.user_id == user_id, Reclamation.delete_at.is_(None))
         )
+        
         
         count_query = (
             select(func.count(Reclamation.id))

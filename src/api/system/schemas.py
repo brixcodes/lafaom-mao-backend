@@ -1,4 +1,4 @@
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, EmailStr,Field
 from typing import List,Optional,Literal
 from datetime import datetime
 from src.helper.schemas import BaseOutSuccess, BaseOutPage
@@ -13,7 +13,7 @@ class CreateOrganizationCenterInput(BaseModel):
     country_code: str = ""
     telephone_number: str = ""
     mobile_number: str = ""
-    email: str = ""
+    email: EmailStr 
     website: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -26,10 +26,10 @@ class UpdateOrganizationCenterInput(BaseModel):
     address: str = ""
     city: str = ""
     postal_code: Optional[str] = None
-    country_code: str = ""
+    country_code: str = "SN"
     telephone_number: str = ""
     mobile_number: str = ""
-    email: str = ""
+    email: EmailStr 
     website: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None

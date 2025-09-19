@@ -1,7 +1,8 @@
 from fastapi import HTTPException, Depends, status
 
 from src.helper.schemas import BaseOutFail, ErrorMessage
-from src.api.training.service import TrainingService
+from src.api.training.services import TrainingService , StudentApplicationService ,ReclamationService ,SpecialtyService
+
 
 
 async def get_training(training_id: str, training_service: TrainingService = Depends()):
@@ -30,8 +31,8 @@ async def get_training_session(session_id: str, training_service: TrainingServic
     return session
 
 
-async def get_student_application(application_id: int, training_service: TrainingService = Depends()):
-    application = await training_service.get_student_application_by_id(application_id)
+async def get_student_application(application_id: int, service: StudentApplicationService = Depends()):
+    application = await service.get_student_application_by_id(application_id)
     if application is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -43,8 +44,8 @@ async def get_student_application(application_id: int, training_service: Trainin
     return application
 
 
-async def get_student_attachment(attachment_id: int, training_service: TrainingService = Depends()):
-    attachment = await training_service.get_student_attachment_by_id(attachment_id)
+async def get_student_attachment(attachment_id: int, service: StudentApplicationService = Depends()):
+    attachment = await service.get_student_attachment_by_id(attachment_id)
     if attachment is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -56,8 +57,8 @@ async def get_student_attachment(attachment_id: int, training_service: TrainingS
     return attachment
 
 
-async def get_specialty(specialty_id: int, training_service: TrainingService = Depends()):
-    specialty = await training_service.get_specialty_by_id(specialty_id)
+async def get_specialty(specialty_id: int, service: SpecialtyService = Depends()):
+    specialty = await service.get_specialty_by_id(specialty_id)
     if specialty is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,8 +70,8 @@ async def get_specialty(specialty_id: int, training_service: TrainingService = D
     return specialty
 
 
-async def get_reclamation(reclamation_id: int, training_service: TrainingService = Depends()):
-    reclamation = await training_service.get_reclamation_by_id(reclamation_id)
+async def get_reclamation(reclamation_id: int, service: ReclamationService = Depends()):
+    reclamation = await service.get_reclamation_by_id(reclamation_id)
     if reclamation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -82,9 +83,9 @@ async def get_reclamation(reclamation_id: int, training_service: TrainingService
     return reclamation
 
 
-async def get_user_reclamation(reclamation_id: int, current_user, training_service: TrainingService = Depends()):
+async def get_user_reclamation(reclamation_id: int, service: ReclamationService = Depends()):
     """Get reclamation that belongs to current user"""
-    reclamation = await training_service.get_reclamation_by_id(reclamation_id, user_id=current_user.id)
+    reclamation = await service.get_reclamation_by_id(reclamation_id, user_id=None)
     if reclamation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
