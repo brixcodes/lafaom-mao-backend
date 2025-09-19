@@ -1,0 +1,374 @@
+from typing import List, Optional, Tuple
+from datetime import datetime, timezone
+from fastapi import Depends
+from sqlalchemy import func, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlmodel import select, or_
+
+from src.database import get_session_async
+from src.api.training.models import (
+    TrainingSession,
+    StudentApplication,
+    StudentAttachment,
+    TrainingSessionParticipant,
+    Training,
+)
+from src.api.training.schemas.student_application import (
+    StudentApplicationCreateInput,
+    StudentApplicationFilter,
+    StudentAttachmentInput,
+)
+from src.api.user.service import UserService
+from src.api.user.models import User, UserTypeEnum
+from src.api.payments.schemas import PaymentInitInput
+from src.api.payments.service import PaymentService
+from src.api.payments.models import Payment, PaymentStatusEnum
+from src.config import settings
+from src.helper.file_helper import FileHelper
+from src.helper.moodle import MoodleService
+from src.helper.notifications import SendPasswordNotification
+
+try:
+    from src.helper.moodle import (
+        moodle_create_course_task,
+        moodle_ensure_user_task,
+        moodle_enrol_user_task,
+    )
+except Exception:
+    moodle_create_course_task = None
+    moodle_ensure_user_task = None
+    moodle_enrol_user_task = None
+
+import secrets
+import string
+
+def generate_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return password
+
+class StudentApplicationService:
+    def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
+        self.session = session
+
+    # Student Applications CRUD
+    async def start_student_application(self, data: StudentApplicationCreateInput) -> StudentApplication:
+        """Create a new student application"""
+        user_service = UserService(self.session)
+
+        user = await user_service.get_by_email(data.email)
+        
+        if user is None:
+            # create a user with default password
+            default_password = generate_password(8)
+            create_input = type("Obj", (), {
+                "first_name": data.first_name or "",
+                "last_name": data.last_name or "",
+                "country_code": data.country_code or "CM",
+                "mobile_number": data.phone_number or "",
+                "email": data.email,
+                "password": default_password,
+                "user_type": UserTypeEnum.STUDENT,
+            })
+            user = await user_service.create(create_input)
+            
+            SendPasswordNotification(
+                email=data.email,
+                name=user.full_name(),
+                password=default_password
+            ).send_notification()  
+
+        # Validate target session when provided
+        if data.target_session_id is not None:
+            session_stmt = select(TrainingSession).where(TrainingSession.id == data.target_session_id)
+            session_res = await self.session.execute(session_stmt)
+            target_session = session_res.scalars().first()
+            if target_session is None:
+                raise ValueError("SESSION_NOT_FOUND")
+            from datetime import date as _date
+            if target_session.registration_deadline < _date.today():
+                raise ValueError("SESSION_REGISTRATION_CLOSED")
+            if target_session.status != "OPEN_FOR_REGISTRATION":
+                raise ValueError("SESSION_NOT_OPEN")
+            if target_session.available_slots is not None and target_session.available_slots <= 0:
+                raise ValueError("SESSION_NO_SLOTS")
+        else:
+            raise ValueError("TARGET_SESSION_ID_REQUIRED")
+
+        # Generate application number
+        training_id = target_session.training_id
+        count_stmt = select(func.count(StudentApplication.id)).where(StudentApplication.training_id == training_id)
+        count_res = await self.session.execute(count_stmt)
+        seq = (count_res.scalar() or 0) + 1
+        application_number = f"APP-TRAIN-{seq:04d}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        application = StudentApplication(
+            user_id=user.id,
+            training_id=training_id,
+            target_session_id=data.target_session_id,
+            application_number=application_number,
+            registration_fee=target_session.registration_fee,
+            training_fee=target_session.training_fee,
+            currency=target_session.currency,
+        )
+        self.session.add(application)
+        await self.session.commit()
+        await self.session.refresh(application)
+        return application
+  
+    async def update_student_application(self, application: StudentApplication, data) -> StudentApplication:
+        """Update student application"""
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(application, key, value)
+        self.session.add(application)
+        await self.session.commit()
+        await self.session.refresh(application)
+        return application
+
+    async def submit_student_application(self, application: StudentApplication) -> dict:
+        """Submit student application and initiate payment"""
+        # Use the target session to get fees
+        session_stmt = select(TrainingSession).where(TrainingSession.id == application.target_session_id)
+        session_res = await self.session.execute(session_stmt)
+        target_session = session_res.scalars().first()
+        if target_session is None:
+            return {"message": "failed", "reason": "SESSION_NOT_FOUND"}
+
+        # Validate required attachments from session
+        if target_session.required_attachments:
+            existing = await self.list_attachments_by_application(application.id)
+            existing_types = {a.document_type for a in existing}
+            for required in target_session.required_attachments:
+                if required not in existing_types:
+                    return {"message": "failed", "reason": f"MISSING_ATTACHMENT:{required}"}
+
+        amount = target_session.registration_fee or 0.0
+        payment_service = PaymentService(self.session)
+        payment_input = PaymentInitInput(
+            payable=application,
+            amount=amount,
+            product_currency=target_session.currency,
+            description=f"Payment for training application fee of session {target_session.id}",
+            payment_provider="CINETPAY",
+        )
+        payment = await payment_service.initiate_payment(payment_input)
+        return payment
+
+    async def get_student_application_by_id(self, application_id: int) -> Optional[StudentApplication]:
+        """Get student application by ID"""
+        statement = select(StudentApplication).where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def get_full_student_application_by_id(self, application_id: int, user_id: Optional[str] = None) -> Optional[StudentApplication]:
+        """Get full student application by ID with relationships"""
+        statement = (
+            select(StudentApplication)
+            .where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
+            .options(selectinload(StudentApplication.attachments))
+        )
+        
+        if user_id is not None:
+            statement = statement.where(StudentApplication.user_id == user_id)
+            
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+    
+    async def get_student_application(self, filters: StudentApplicationFilter, user_id: Optional[str] = None) -> Tuple[List[Training], int]:
+        """Get student applications with filtering"""
+        statement = (
+            select(
+                StudentApplication.id,
+                StudentApplication.application_number,
+                StudentApplication.status,
+                StudentApplication.target_session_id,
+                StudentApplication.refusal_reason,  
+                StudentApplication.registration_fee,
+                StudentApplication.training_fee,
+                StudentApplication.currency,
+                StudentApplication.created_at,
+                StudentApplication.updated_at,
+                StudentApplication.training_id,
+                Training.title.label("training_title"),
+                TrainingSession.start_date.label("training_session_start_date"),
+                TrainingSession.end_date.label("training_session_end_date"),
+                User.email.label("user_email"),
+                User.first_name.label("user_first_name"),
+                User.last_name.label("user_last_name"),
+            )
+            .join(User, User.id == StudentApplication.user_id)
+            .join(Training, Training.id == StudentApplication.training_id)
+            .join(TrainingSession, TrainingSession.id == StudentApplication.target_session_id)
+            .join(Payment, Payment.payable_id == StudentApplication.id)
+            .where(Payment.payment_type == StudentApplication.__class__.__name__)
+            .where(StudentApplication.delete_at.is_(None))
+        )
+        
+        count_query = (
+            select(func.count(StudentApplication.id))
+            .join(User, User.id == StudentApplication.user_id)
+            .join(Training, Training.id == StudentApplication.training_id)         
+            .join(TrainingSession, TrainingSession.id == StudentApplication.target_session_id)
+            .join(Payment, Payment.payable_id == StudentApplication.id)
+            .where(Payment.payment_type == StudentApplication.__class__.__name__)
+            .where(StudentApplication.delete_at.is_(None))
+        )
+        
+        if user_id is not None:
+            statement = statement.where(StudentApplication.user_id == user_id)
+            count_query = count_query.where(StudentApplication.user_id == user_id)
+        
+        if filters.is_paid is not None and filters.is_paid == True:
+            statement = statement.where(Payment.status == PaymentStatusEnum.ACCEPTED)
+            count_query = count_query.where(Payment.status ==  PaymentStatusEnum.ACCEPTED)
+
+        if filters.search is not None:
+            like_clause = or_(
+                User.first_name.contains(filters.search),
+                User.last_name.contains(filters.search),
+                Training.title.contains(filters.search),
+                Training.presentation.contains(filters.search),
+            )
+            statement = statement.where(like_clause)
+            count_query = count_query.where(like_clause)
+
+        if filters.status is not None:
+            statement = statement.where(StudentApplication.status == filters.status)
+            count_query = count_query.where(StudentApplication.status == filters.status)
+            
+        if filters.training_id is not None:
+            statement = statement.where(StudentApplication.training_id == filters.training_id)
+            count_query = count_query.where(StudentApplication.training_id == filters.training_id)
+            
+        if filters.training_session_id is not None:
+            statement = statement.where(StudentApplication.target_session_id == filters.training_session_id)
+            count_query = count_query.where(StudentApplication.target_session_id == filters.training_session_id)
+
+        if filters.order_by == "created_at":
+            statement = statement.order_by(StudentApplication.created_at if filters.asc == "asc" else StudentApplication.created_at.desc())
+
+        total_count = (await self.session.execute(count_query)).scalar_one()
+
+        statement = statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+        result = await self.session.execute(statement)
+        return result.scalars().all(), total_count
+    
+    async def delete_student_application(self, application: StudentApplication) -> StudentApplication:
+        """Delete student application"""
+        await self.dissociate_student_attachment(application_id=application.id)
+        await self.session.delete(application)
+        await self.session.commit()
+        return application
+
+    async def enroll_student_to_session(self, application: StudentApplication) -> TrainingSessionParticipant:
+        """Enroll student to training session"""
+        participant = TrainingSessionParticipant(
+            session_id=application.target_session_id,
+            user_id=application.user_id,
+            joined_at=datetime.now(timezone.utc),
+        )
+        self.session.add(participant)
+        
+        # decrement available slots if applicable
+        if application.target_session_id is not None:
+            stmt = select(TrainingSession).where(TrainingSession.id == application.target_session_id)
+            res = await self.session.execute(stmt)
+            sess = res.scalars().first()
+            if sess and sess.available_slots is not None and sess.available_slots > 0:
+                sess.available_slots -= 1
+                self.session.add(sess)
+        
+        await self.session.commit()
+        await self.session.refresh(participant)
+
+        # Enrol on Moodle (best-effort)
+        try:
+            if sess and sess.moodle_course_id:
+                user_service = UserService(self.session)
+                user = await user_service.get_by_id(application.user_id)
+                if user and user.email:
+                    if moodle_ensure_user_task and moodle_enrol_user_task:
+                        moodle_ensure_user_task.apply_async(kwargs={
+                            "email": user.email,
+                            "firstname": user.first_name,
+                            "lastname": user.last_name,
+                        })
+                    else:
+                        moodle = MoodleService()
+                        moodle_user_id = user.moodle_user_id
+                        if not moodle_user_id:
+                            moodle_user_id = await moodle.ensure_user(
+                                email=user.email,
+                                firstname=user.first_name,
+                                lastname=user.last_name,
+                            )
+                            user.moodle_user_id = moodle_user_id
+                            self.session.add(user)
+                            await self.session.commit()
+                            await self.session.refresh(user)
+                        await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
+        except Exception:
+            pass
+        return participant
+
+    # Attachments
+    async def create_student_attachment(self, user_id: str, application_id: int, input: StudentAttachmentInput) -> StudentAttachment:
+        """Create student attachment"""
+        # Replace existing attachment of same type
+        existing_stmt = (
+            select(StudentAttachment)
+            .join(StudentApplication, StudentApplication.id == StudentAttachment.application_id)
+            .where(StudentApplication.user_id == user_id)
+            .where(StudentAttachment.document_type == input.name, StudentAttachment.application_id == application_id))
+        existing_res = await self.session.execute(existing_stmt)
+        existing = existing_res.scalars().first()
+        if existing is not None:
+            FileHelper.delete_file(existing.file_path)
+            await self.session.delete(existing)
+            await self.session.commit()
+
+        url, _, _ = await FileHelper.upload_file(input.file, f"/student-applications/{application_id}", input.name)
+        attachment = StudentAttachment(application_id=application_id, file_path=url, document_type=input.name)
+        self.session.add(attachment)
+        await self.session.commit()
+        await self.session.refresh(attachment)
+        return attachment
+
+    async def dissociate_student_attachment(self, application_id: int) -> None:
+        """Dissociate student attachment"""
+        statement = update(StudentAttachment).where(StudentAttachment.application_id == application_id).values(application_id=None)
+        await self.session.execute(statement)
+        await self.session.commit()
+
+    async def get_student_attachment_by_id(self, attachment_id: int, user_id: Optional[str] = None) -> Optional[StudentAttachment]:
+        """Get student attachment by ID"""
+        existing_stmt = (
+            select(StudentAttachment)
+            .join(StudentApplication, StudentApplication.id == StudentAttachment.application_id)
+            .where(StudentAttachment.id == attachment_id))
+        if user_id is not None:
+            existing_stmt = existing_stmt.where(StudentApplication.user_id == user_id)
+        result = await self.session.execute(existing_stmt)
+        return result.scalars().first()
+
+    async def list_attachments_by_application(self, application_id: int, user_id: Optional[str] = None) -> List[StudentAttachment]:
+        """List attachments by application"""
+        statement = (
+            select(StudentAttachment)
+            .where(StudentAttachment.application_id == application_id, StudentAttachment.delete_at.is_(None))
+            .order_by(StudentAttachment.created_at)
+        )
+        
+        if user_id is not None:
+            statement = statement.join(StudentApplication).where(StudentApplication.user_id == user_id)
+            
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def delete_student_attachment(self, attachment: StudentAttachment) -> StudentAttachment:
+        """Delete student attachment"""
+        FileHelper.delete_file(attachment.file_path)
+        self.session.delete(attachment)
+        await self.session.commit()
+        return attachment

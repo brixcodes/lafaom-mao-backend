@@ -1,11 +1,11 @@
 import hashlib
 import hmac
 from typing import Annotated
-from fastapi import APIRouter, Depends, Form, HTTPException, Header
+from fastapi import APIRouter, Depends, Form, HTTPException, Header,Query
 from src.api.payments.dependencies import get_payment_by_transaction
 from src.api.payments.models import PaymentStatusEnum
 from src.api.payments.service import PaymentService 
-from src.api.payments.schemas import  WebhookPayload
+from src.api.payments.schemas import  PaymentFilter, PaymentOutSuccess, PaymentPageOutSuccess, WebhookPayload
 from src.api.auth.models import User
 from src.config import settings
 # This is a placeholder for your actual dependency to get the current user
@@ -19,6 +19,15 @@ async def get_current_active_user() -> User:
 
 router = APIRouter()
 
+
+@router.get("/payments",response_model=PaymentPageOutSuccess)
+async def get_payment_status(
+    filters: Annotated[PaymentFilter, Query(...)],
+    payment_service: PaymentService = Depends()
+):
+ 
+    payments, total =await payment_service.list_payments(filters)
+    return {"data": payments, "page": filters.page, "number": len(payments), "total_number": total}
 
 @router.post("/cinetpay/notify")
 async def cinetpay_webhook_handler(
@@ -69,14 +78,15 @@ async def cinetpay_webhook_handler(
         "transaction_id": payload.cpm_trans_id,
     }
 
-@router.get("/check-status/{transaction_id}")
+@router.get("/check-status/{transaction_id}",response_model=PaymentOutSuccess)
 async def get_payment_status(
     transaction_id: str,
     payment : Annotated[User, Depends(get_payment_by_transaction)],
     payment_service: PaymentService = Depends()
 ):
-    if payment.status == PaymentStatusEnum.PENDING:
-        payment = await payment_service.check_payment_status(transaction_id)
+    if payment.status == PaymentStatusEnum.PENDING.value:
+        
+        payment = await payment_service.check_payment_status(payment)
         
     return {
         "message" : "success",

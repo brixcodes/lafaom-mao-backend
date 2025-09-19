@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import List, Optional, Literal
 from fastapi import UploadFile
 from pydantic import BaseModel, Field
+from src.api.payments.schemas import InitPaymentOut
 from src.helper.schemas import BaseOutPage, BaseOutSuccess
 from src.api.job_offers.models import ApplicationStatusEnum
 
@@ -171,12 +172,8 @@ class JobApplicationOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-class InitPaymentOut(BaseModel):
-    payment_provider : str
-    amount : float
-    transaction_id : str 
-    payment_link : Optional[str] = None
-    notify_url : Optional[str] = None
+class JobApplicationFullOut(JobApplicationOut):
+    attachments : Optional[List[JobAttachmentOut]]
 
 class PaymentJobApplicationOut(BaseModel):
     job_application  : JobApplicationOut
@@ -187,6 +184,7 @@ class JobApplicationFilter(BaseModel):
     page_size: int = Field(20, ge=1)
     search: Optional[str] = None
     status: Optional[str] = None
+    is_paid: Optional[bool] = True
     job_offer_id: Optional[str] = None
     order_by: Literal["created_at", "application_number", "status"] = "created_at"
     asc: Literal["asc", "desc"] = "asc"
@@ -211,7 +209,7 @@ class JobApplicationsPageOutSuccess(BaseOutPage):
 
 
 class JobAttachmentOutSuccess(BaseOutSuccess):
-    data: JobAttachmentOut
+    data: JobApplicationFullOut
 
 
 class JobAttachmentListOutSuccess(BaseOutSuccess):

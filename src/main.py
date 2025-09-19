@@ -8,6 +8,7 @@ from src.api.blog.router import router as blog_router
 from src.api.job_offers.router import router as job_offers_router
 from src.api.payments.router import router as payments_router
 from src.api.auth.router import router as auth_router
+from src.api.training.router import router as training_router
 import firebase_admin
 from firebase_admin import credentials
 from fastapi.staticfiles import StaticFiles
@@ -49,6 +50,7 @@ app.include_router(auth_router, prefix=base_url + "/auth", tags=["Auth"])
 app.include_router(user_router, prefix=base_url )
 app.include_router(blog_router, prefix=base_url )
 app.include_router(job_offers_router, prefix=base_url )
+app.include_router(training_router, prefix=base_url )
 app.include_router(payments_router, prefix=base_url + "/payments", tags=["Payments"])
 
 @app.exception_handler(RequestValidationError)

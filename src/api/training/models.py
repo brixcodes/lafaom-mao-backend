@@ -1,14 +1,13 @@
 
 from sqlmodel import  Field,Relationship
 from datetime import date
-from src.api.system.models import TrainingCenter
+from src.api.system.models import OrganizationCenter
+from src.api.user.models import User
 from src.helper.model import CustomBaseUUIDModel,CustomBaseModel
 from typing import Dict, List, Optional
 from enum import Enum
 from  datetime import datetime
-from sqlalchemy import JSON
-
-
+from sqlalchemy import Column, JSON ,Numeric
 
 class TrainingTypeEnum(str, Enum):
     ON_SITE = "On-Site"
@@ -26,6 +25,8 @@ class DurationEnum(str,Enum):
     HOURS = "HOURS"
 
 class Specialty(CustomBaseModel,table=True):
+    __tablename__ = "specialties"
+    
     name: str
     description: Optional[str] = Field(default="")
 
@@ -43,8 +44,12 @@ class Training(CustomBaseUUIDModel,table=True):
     info_sheet: Optional[str] = Field(default=None, max_length=255) #lien vers la fiche d'info
     training_type : str= Field(default=TrainingTypeEnum.ON_SITE)
     presentation: str = Field(default="", description="Context, challenges, and overall vision of the training")
-    benefits: Optional[List[Dict[str,str]]] = Field(default=None, sa_column=Field(default=None, sa_column_kwargs={"type_": JSON}).sa_column)  # JSON
-    strengths: Optional[List[Dict[str,str]]]  = Field(default=None, sa_column=Field(default=None, sa_column_kwargs={"type_": JSON}).sa_column)     # JSON array
+    
+    # ✅ Correct JSON columns
+    benefits: Optional[List[Dict[str, str]]] = Field(default=None, sa_column=Column(JSON))
+    strengths: Optional[List[Dict[str, str]]] = Field(default=None, sa_column=Column(JSON))
+    
+    
     target_skills: str = Field(default="", description="Skills and know-how to be acquired")
     program: str = Field(default="", description="Detailed content and structure of the training")
     target_audience: str = Field(default="", description="Intended audience and prerequisites")
@@ -64,7 +69,7 @@ class TrainingSession(CustomBaseUUIDModel, table=True):
     __tablename__ = "training_sessions"
 
     training_id: str = Field(foreign_key="trainings.id", nullable=False)
-    center_id: Optional[int] = Field(foreign_key="training_centers.id", nullable=True)
+    center_id: Optional[int] = Field(foreign_key="organization_centers.id", nullable=True)
 
     start_date: Optional[date] = Field(default=None)
     end_date: Optional[date] = Field(default=None)
@@ -73,14 +78,20 @@ class TrainingSession(CustomBaseUUIDModel, table=True):
 
     status: str = Field(default=TrainingSessionStatusEnum.OPEN_FOR_REGISTRATION, nullable=False)
 
-    registration_fee: Optional[float] = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
-    training_fee: Optional[float] = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
+    registration_fee: Optional[float] = Field(default=None, sa_column=Column(Numeric(12, 2)))
+    training_fee: Optional[float] = Field(default=None, sa_column=Column(Numeric(12, 2)))
+    
     currency : str = Field(default="EUR")
+    
+    required_attachments: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    installment_percentage: Optional[List[float]] = Field(default=None, sa_column=Column(JSON))
+    
+    moodle_course_id: Optional[int] = Field(default=None, description="Linked Moodle course id")
     
     
     # Relationships
     training: Optional[Training] = Relationship()
-    center: Optional["TrainingCenter"] = Relationship()
+    center: Optional["OrganizationCenter"] = Relationship()
 
 
 class ApplicationStatusEnum(str, Enum):
@@ -93,15 +104,18 @@ class StudentApplication(CustomBaseModel, table=True):
     
     user_id: str = Field(foreign_key="users.id", nullable=False)
     training_id: str = Field(foreign_key="trainings.id")
+    target_session_id: str = Field( foreign_key="training_sessions.id")
     application_number: str = Field(default=None, max_length=50, index=True, unique=True)
     status: str = Field(default=ApplicationStatusEnum.RECEIVED)
     refusal_reason: Optional[str] = Field(default=None)
-    registration_fee: float = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
-    training_fee: float = Field(default=None, sa_column_kwargs={"precision": 12, "scale": 2})
-    
-    installment_percentage: List[float] = Field(default=None, sa_column=Field(default=None, sa_column_kwargs={"type_": JSON}).sa_column) 
+    registration_fee: Optional[float] = Field(default=None, sa_column=Column(Numeric(12, 2)))
+    training_fee: Optional[float] = Field(default=None, sa_column=Column(Numeric(12, 2)))
+    currency: str = Field(default="EUR")
+    installment_percentage: Optional[List[float]] = Field(default=None, sa_column=Column(JSON))
     
     training: Training = Relationship()
+    training_session: TrainingSession = Relationship()
+    user : User = Relationship()
     
     attachments: List["StudentAttachment"] = Relationship( sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
@@ -114,10 +128,22 @@ class StudentAttachment(CustomBaseModel, table=True):
     upload_date: Optional[datetime] = Field(default=None)
     
 
+class TrainingSessionParticipant(CustomBaseModel, table=True):
+    __tablename__ = "training_session_participants"
+
+    session_id: str = Field(foreign_key="training_sessions.id", nullable=False)
+    user_id: str = Field(foreign_key="users.id", nullable=False)
+    joined_at: Optional[datetime] = Field(default=None)
+
 class ReclamationStatusEnum(str, Enum):
     NEW = "NEW"
     IN_PROGRESS = "IN_PROGRESS"
     CLOSED = "CLOSED"
+
+class ReclamationPriorityEnum(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 class ReclamationType(CustomBaseModel,table=True):
     __tablename__ = "reclamation_types"
@@ -129,8 +155,24 @@ class Reclamation(CustomBaseModel, table=True):
     
     admin_id: Optional[str] = Field(foreign_key="users.id", nullable=True)
     reclamation_number: str = Field( max_length=50, index=True, unique=True)
+    application_number: str = Field( max_length=50, index=True )
     subject: str = Field( max_length=255)
     reclamation_type: int = Field(foreign_key="reclamation_types.id", nullable=False)
-    status: ReclamationStatusEnum = Field(default=ReclamationStatusEnum.NEW)
+    priority : str = Field(default=ReclamationPriorityEnum.LOW, max_length=10)
+    status: str = Field(max_length=10, default=ReclamationStatusEnum.NEW)
     description: str = Field(default="")
     closure_date: Optional[datetime] = Field(default=None)
+
+
+def update_updated_at_training(mapper, connection, target):
+    target.updated_at = datetime.now(timezone.utc)
+
+# Add the event listeners for before update
+event.listen(Training, 'before_update', update_updated_at_training)
+event.listen(TrainingSession, 'before_update', update_updated_at_training)
+event.listen(StudentApplication, 'before_update', update_updated_at_training)
+event.listen(StudentAttachment, 'before_update', update_updated_at_training)
+event.listen(Specialty, 'before_update', update_updated_at_training)
+event.listen(TrainingSessionParticipant, 'before_update', update_updated_at_training)
+event.listen(ReclamationType, 'before_update', update_updated_at_training)
+event.listen(Reclamation, 'before_update', update_updated_at_training)

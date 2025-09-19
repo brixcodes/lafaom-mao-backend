@@ -5,10 +5,11 @@ import math
 from celery import shared_task
 from fastapi import Depends
 import httpx
+from sqlalchemy import func, or_
 from sqlmodel import select
 from src.config import settings
 from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
-from src.api.payments.schemas import CinetPayInit, PaymentInitInput
+from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInput
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session, get_session_async
@@ -23,6 +24,81 @@ class PaymentService:
     @staticmethod
     def round_up_to_nearest_5(x: float) -> int:
         return int(math.ceil(x / 5.0)) * 5
+    
+    async def list_payments(self, filters: PaymentFilter):
+        
+        statement = (
+            select(Payment)
+            .where(Payment.delete_at.is_(None))
+        )
+        count_query = select(func.count(Payment.id)).where(Payment.delete_at.is_(None))
+        
+        print(filters)
+
+        if filters.search is not None:
+            like_clause = or_(
+                Payment.transaction_id.contains(filters.search),
+                Payment.payable_type.contains(filters.search),
+                Payment.payment_type.contains(filters.search),
+                Payment.product_currency.contains(filters.search),
+            )
+            statement = statement.where(like_clause)
+            count_query = count_query.where(like_clause)
+            
+        if filters.currency is not None:
+            statement = statement.where(Payment.product_currency == filters.currency)
+            count_query = count_query.where(Payment.product_currency == filters.currency)
+
+        if filters.status is not None:
+            statement = statement.where(Payment.status == filters.status)
+            count_query = count_query.where(Payment.status == filters.status)
+
+        if filters.min_amount is not None:
+            statement = statement.where(Payment.product_amount >= filters.min_amount)
+            count_query = count_query.where(Payment.product_amount >= filters.min_amount)
+            
+        if filters.max_amount is not None:
+            statement = statement.where(Payment.product_amount <= filters.max_amount)
+            count_query = count_query.where(Payment.product_amount <= filters.max_amount)
+            
+        if filters.date_from is not None:
+            statement = statement.where(Payment.created_at >= filters.date_from)
+            count_query = count_query.where(Payment.created_at >= filters.date_from)
+            
+        if filters.date_to is not None:
+            statement = statement.where(Payment.created_at <= filters.date_to)
+            count_query = count_query.where(Payment.created_at <= filters.date_to)
+
+        if filters.order_by == "created_at":
+            statement = statement.order_by(Payment.created_at if filters.asc == "asc" else Payment.created_at.desc())
+        elif filters.order_by == "amount":
+            statement = statement.order_by(Payment.product_amount if filters.asc == "asc" else Payment.product_amount.desc())
+        elif filters.order_by == "status":
+            statement = statement.order_by(Payment.status if filters.asc == "asc" else Payment.status.desc())
+
+        total_count = (await self.session.execute(count_query)).scalar_one()
+
+        statement = statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+        result = await self.session.execute(statement)
+        return result.scalars().all(), total_count
+    
+    async def get_payment_by_payable(self, payable_id: str, payable_type: str):
+        statement = select(Payment).where(Payment.payable_id == payable_id).where(Payment.payable_type == payable_type)
+        result = await self.session.execute(statement)
+        payment = result.scalars().one()
+        return payment
+    
+    async def get_payment_by_transaction_id(self, transaction_id: str):
+        statement = select(Payment).where(Payment.transaction_id == transaction_id)
+        result = await self.session.execute(statement)
+        payment = result.scalars().one()
+        return payment
+        
+    async def get_payment_by_payment_type(self, payment_type: str, payment_type_id: str):
+        statement = select(Payment).where(Payment.payment_type == payment_type).where(Payment.payment_type_id == payment_type_id)
+        result = await self.session.execute(statement)
+        payment = result.scalars().one()
+        return payment
     
     async def get_currency_rates(self, from_currency: str, to_currencies: list[str] = None):
         
@@ -48,7 +124,6 @@ class PaymentService:
             #print(data,params)
         await set_to_redis(cache_key, json.dumps(rates), ex=14400)
         return rates
-
 
     async def initiate_payment(self, payment_data: PaymentInitInput,is_swallow: bool = False):
         
@@ -144,20 +219,25 @@ class PaymentService:
 
     async def check_payment_status(self, payment : Payment):
         if payment.payment_type == "CinetPayPayment":
+        
             
             cinetpay_client = CinetPayService(self.session)
             cinetpay_payment = await cinetpay_client.get_cinetpay_payment(payment.transaction_id)
             
             if cinetpay_payment is None:
+                
                 payment.status = PaymentStatusEnum.ERROR
                 await self.session.commit()
                 await self.session.refresh(payment)
             else :
                 result = await  CinetPayService.check_cinetpay_payment_status(payment.transaction_id)
+                
                 if result["data"]["status"] == "ACCEPTED":
                     payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.amount_received = result["data"]["amount"]
+                    
+                    
                 elif result["data"]["status"] == "REFUSED":
                     payment.status = PaymentStatusEnum.REFUSED.value
                     cinetpay_payment.status = PaymentStatusEnum.REFUSED.value
@@ -234,7 +314,9 @@ class CinetPayService:
             payload["customer_state"] = payment_data.customer_state
         if payment_data.customer_zip_code:
             payload["customer_zip_code"] = payment_data.customer_zip_code
-
+            
+        payload["customer_zip_code"] = "065100"
+        
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
             

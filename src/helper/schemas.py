@@ -171,6 +171,14 @@ class ErrorMessage(Enum):
     
     PAYMENT_INITIATION_FAILED = ('payment_initiation_failed',"Payment initiation failed")
     
+    # Training Errors
+    TRAINING_NOT_FOUND = ('training_not_found',"Training not found")
+    TRAINING_SESSION_NOT_FOUND = ('training_session_not_found',"Training session not found")
+    
+    # Student Application Errors
+    STUDENT_APPLICATION_NOT_FOUND = ('student_application_not_found',"Student application not found")
+    STUDENT_ATTACHMENT_NOT_FOUND = ('student_attachment_not_found',"Student attachment not found")
+    
     
     def __str__(self):
-        return self.value   
+        return self.value

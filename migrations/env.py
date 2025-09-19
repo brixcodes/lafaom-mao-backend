@@ -27,6 +27,8 @@ from src.api.auth.models import RefreshToken
 from src.api.blog.models import Post, PostCategory, PostSection
 from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode
 from src.api.payments.models import Payment, CinetPayPayment
+from src.api.system.models import OrganizationCenter
+from src.api.training.models import StudentApplication, Training, TrainingSession, TrainingSessionParticipant
 
 
 target_metadata = SQLModel.metadata

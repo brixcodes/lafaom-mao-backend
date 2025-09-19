@@ -66,6 +66,20 @@ class PermissionEnum(str, Enum):
     CAN_CHANGE_JOB_APPLICATION_STATUS = "can_change_job_application_status"
     CAN_DELETE_JOB_ATTACHMENT = "can_delete_job_attachment"
     
+    CAN_UPDATE_TRAINING_SESSION = "can_update_training_session"
+    CAN_CREATE_TRAINING_SESSION = "can_create_training_session"
+    CAN_DELETE_TRAINING_SESSION = "can_delete_training_session"
+    CAN_VIEW_TRAINING_SESSION = "can_view_training_session"
+    
+    CAN_VIEW_TRAINING = "can_view_training"
+    CAN_CREATE_TRAINING = "can_create_training"
+    CAN_UPDATE_TRAINING = "can_update_training"
+    CAN_DELETE_TRAINING = "can_delete_training"
+    
+    CAN_VIEW_STUDENT_APPLICATION = "can_view_student_application"
+    CAN_CHANGE_STUDENT_APPLICATION_STATUS = "can_change_student_application_status"
+    CAN_DELETE_STUDENT_ATTACHMENT = "can_delete_student_attachment"
+    
     
     
 """
@@ -165,6 +179,7 @@ class User(CustomBaseUUIDModel,table=True):
     last_login : datetime | None = Field(default=None, nullable=True, sa_type=TIMESTAMP(timezone=True)) #datetime = Field(sa_type=TIMESTAMP(timezone=True), nullable=True)
     user_type :str = Field(default=UserTypeEnum.STUDENT)
     two_factor_enabled : bool = Field(default=False)
+    moodle_user_id : int | None = Field(default=None)
     
     
     professions_status : ProfessionStatus | None  = Relationship()

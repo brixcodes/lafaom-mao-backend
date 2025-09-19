@@ -13,6 +13,7 @@ from passlib.context import CryptContext
 import re
 
 from src.helper.notifications import SendPasswordNotification
+from src.helper.moodle import MoodleService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -213,11 +214,19 @@ class UserService:
         result = await self.session.execute(statement)
         user = result.scalars().one()
 
+        old_email = user.email
         user.email = email
 
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
+        # Sync Moodle email if mapped
+        try:
+            if user.moodle_user_id and old_email != email:
+                moodle = MoodleService()
+                await moodle.update_user_email(user_id=int(user.moodle_user_id), email=email)
+        except Exception:
+            pass
         return user
 
     async def update_profile(self, user_id: str, input: UpdateUserProfile):

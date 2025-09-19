@@ -1,19 +1,18 @@
-from fastapi import HTTPException, Depends,status
+from fastapi import HTTPException, Depends, status
 
 from src.helper.schemas import BaseOutFail, ErrorMessage
+from src.api.system.service import OrganizationCenterService
 
-from src.api.user.service import UserService
 
-
-async def get_user(user_id: str, user_service: UserService = Depends()):
+async def get_organization_center(organization_id: int, org_service: OrganizationCenterService = Depends()):
     
-    user = await user_service.get_by_id(user_id)
-    if user is None:
+    organization = await org_service.get_by_id(organization_id)
+    if organization is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=BaseOutFail(
-                    message=ErrorMessage.USER_NOT_FOUND.description,
-                    error_code= ErrorMessage.USER_NOT_FOUND.value
-                ).model_dump()
+                message="Organization Center not found",
+                error_code="ORGANIZATION_CENTER_NOT_FOUND"
+            ).model_dump()
         )
-    return user
+    return organization

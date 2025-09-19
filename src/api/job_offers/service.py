@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
 from slugify import slugify
+from src.api.payments.models import Payment, PaymentStatusEnum
 from src.database import get_session_async
 from src.api.job_offers.models import JobOffer, JobApplication, JobAttachment, JobApplicationCode, ApplicationStatusEnum
 from src.api.job_offers.schemas import JobApplicationCreateInput, JobApplicationUpdateByCandidateInput, JobAttachmentInput, JobOfferFilter, JobApplicationFilter, UpdateJobOfferStatusInput
@@ -163,20 +164,33 @@ class JobOfferService:
         statement = (
             select(JobApplication)
             .where(JobApplication.id == application_id, JobApplication.delete_at.is_(None))
+            .options(selectinload(JobApplication.job_offer))
             .options(selectinload(JobApplication.attachments))
         )
         result = await self.session.execute(statement)
         return result.scalars().first()
 
     async def list_job_applications(self, filters: JobApplicationFilter) -> Tuple[List[JobApplication], int]:
-        statement = select(JobApplication).where(JobApplication.delete_at.is_(None))
+        statement = (
+            select()
+            .join(JobOffer, JobOffer.id == JobApplication.job_offer_id)
+            .join(Payment, Payment.payable_id == JobApplication.id)
+            .where(Payment.payable_type == JobApplication.__class__.__name__)
+            .where(JobApplication.delete_at.is_(None))
+        )
         count_query = select(func.count(JobApplication.id)).where(JobApplication.delete_at.is_(None))
+        
+        if filters.is_paid is not None and filters.is_paid == True:
+            statement = statement.where(Payment.status == PaymentStatusEnum.ACCEPTED)
+            count_query = count_query.where(Payment.status ==  PaymentStatusEnum.ACCEPTED)
 
         if filters.search is not None:
             like_clause = or_(
                 JobApplication.first_name.contains(filters.search),
                 JobApplication.last_name.contains(filters.search),
                 JobApplication.email.contains(filters.search),
+                JobOffer.title.contains(filters.search),
+                JobOffer.reference.contains(filters.search),
                 JobApplication.application_number.contains(filters.search),
             )
             statement = statement.where(like_clause)
