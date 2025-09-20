@@ -11,8 +11,8 @@ async def get_organization_center(organization_id: int, org_service: Organizatio
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=BaseOutFail(
-                message="Organization Center not found",
-                error_code="ORGANIZATION_CENTER_NOT_FOUND"
+                message=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.description,
+                error_code=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.value
             ).model_dump()
         )
     return organization

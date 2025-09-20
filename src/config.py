@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY : str = ""
     AWS_REGION : str = "us-east-1"
     AWS_BUCKET_NAME : str = "your-bucket-name"
+    
+    MOODLE_API_URL : str = "https://moodle.example.com"
+    MOODLE_API_TOKEN : str = ""
 
     ## Credential to connect to the CinetPay Server
     CINETPAY_API_KEY: str | None = None

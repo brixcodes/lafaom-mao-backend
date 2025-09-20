@@ -1,6 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query ,status
 from src.api.auth.utils import check_permissions
+from src.api.system.service import OrganizationCenterService
 from src.api.training.services.specialty import SpecialtyService
 from src.api.user.models import PermissionEnum, User
 from src.api.training.services import TrainingService
@@ -111,8 +112,28 @@ async def create_training_session(
     input: TrainingSessionCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING_SESSION]))],
     training_service: TrainingService = Depends(),
+    org_service: OrganizationCenterService = Depends(),
 ):
-    
+    if input.center_id is not None:
+        org = await org_service.get_by_id(input.center_id)
+        if org is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.description,
+                    error_code=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.value
+                ).model_dump()
+            )
+            
+    training = await training_service.get_training_by_id(input.training_id)
+    if training is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.TRAINING_NOT_FOUND.description,
+                error_code=ErrorMessage.TRAINING_NOT_FOUND.value,
+            ).model_dump(),
+        )
     session = await training_service.create_training_session(input)
     return {"message": "Training session created successfully", "data": session}
 

@@ -112,9 +112,13 @@ class TrainingService:
             tr_stmt = select(Training).where(Training.id == session.training_id)
             tr_res = await self.session.execute(tr_stmt)
             training = tr_res.scalars().first()
-            fullname = f"{training.title} | Session {session.id[:8]}" if training else f"Session {session.id[:8]}"
-            shortname = f"{training.title[:20]}-{session.id[:6]}" if training else f"Session-{session.id[:6]}"
-            
+            # Format dates (use only if available)
+            start_str = session.start_date.strftime("%B %Y") if session.start_date else "Undated"
+            cohort = f"Cohort {session.id[:6].upper()}"  # short unique label
+
+            fullname = f"{training.title} – {start_str} {cohort}"
+            shortname = f"{training.title[:20]}-{session.start_date.strftime('%b%y') if session.start_date else session.id[:4]}"
+                    
             if moodle_create_course_task:
                 moodle_create_course_task.apply_async(kwargs={"fullname": fullname, "shortname": shortname})
             else:

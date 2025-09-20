@@ -52,8 +52,8 @@ async def create_organization_center(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message="Organization Center with this name already exists",
-                error_code="ORGANIZATION_CENTER_NAME_ALREADY_EXISTS"
+                message=ErrorMessage.ORGANIZATION_CENTER_NAME_ALREADY_EXISTS.description,
+                error_code=ErrorMessage.ORGANIZATION_CENTER_NAME_ALREADY_EXISTS.value
             ).model_dump()
         )
     
@@ -64,8 +64,8 @@ async def create_organization_center(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=BaseOutFail(
-                    message="Organization Center with this email already exists",
-                    error_code="ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS"
+                    message=ErrorMessage.ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS.description,
+                    error_code=ErrorMessage.ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS.value
                 ).model_dump()
             )
 
@@ -97,8 +97,8 @@ async def update_organization_center(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message="Organization Center with this name already exists",
-                error_code="ORGANIZATION_CENTER_NAME_ALREADY_EXISTS"
+                message=ErrorMessage.ORGANIZATION_CENTER_NAME_ALREADY_EXISTS.description,
+                error_code=ErrorMessage.ORGANIZATION_CENTER_NAME_ALREADY_EXISTS.value
             ).model_dump()
         )
     
@@ -109,8 +109,8 @@ async def update_organization_center(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=BaseOutFail(
-                    message="Organization Center with this email already exists",
-                    error_code="ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS"
+                    message=ErrorMessage.ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS.description,
+                    error_code=ErrorMessage.ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS.value
                 ).model_dump()
             )
 

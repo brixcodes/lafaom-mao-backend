@@ -120,6 +120,7 @@ class TrainingSessionOut(BaseModel):
     registration_fee: Optional[float]
     training_fee: Optional[float]
     currency: str
+    moodle_course_id: Optional[int]
     created_at: datetime
     updated_at: datetime
 

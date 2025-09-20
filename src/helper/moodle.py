@@ -18,8 +18,10 @@ class MoodleService:
     """
 
     def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None) -> None:
-        self.base_url = (base_url or getattr(settings, "MOODLE_BASE_URL", "")).rstrip("/")
-        self.token = token or getattr(settings, "MOODLE_TOKEN", None)
+        self.base_url = (base_url or getattr(settings, "MOODLE_API_URL", "")).rstrip("/")
+        self.token = token or getattr(settings, "MOODLE_API_TOKEN", None)
+        
+        print(self.base_url, self.token)
         if not self.base_url or not self.token:
             raise ValueError("MoodleService requires MOODLE_BASE_URL and MOODLE_TOKEN in settings")
 
@@ -34,6 +36,8 @@ class MoodleService:
             resp = await client.post(url, params=query, data=params)
             resp.raise_for_status()
             data = resp.json()
+            
+            print(data)
             # Moodle errors often come as {exception, errorcode, message}
             if isinstance(data, dict) and data.get("exception"):
                 raise MoodleAPIError(f"{data.get('errorcode')}: {data.get('message')}")

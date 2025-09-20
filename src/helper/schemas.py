@@ -186,6 +186,14 @@ class ErrorMessage(Enum):
     
     NO_AVAILABLE_SLOTS = ('no_available_slots',"No available slots")
     SESSION_NOT_OPEN = ('session_not_open',"Session is not open")
+    
+    ORGANIZATION_CENTER_NOT_FOUND = ('organization_center_not_found',"Organization center not found")
+    ORGANIZATION_CENTER_EMAIL_ALREADY_EXISTS = ('organization_center_email_already_exists',"Organization center email already exists")
+    ORGANIZATION_CENTER_NAME_ALREADY_EXISTS = ('organization_center_name_already_exists',"Organization center name already exists")
+    ORGANIZATION_CENTER_EMAIL_NOT_FOUND = ('organization_center_email_not_found',"Organization center email not found")
+    ORGANIZATION_CENTER_NAME_NOT_FOUND = ('organization_center_name_not_found',"Organization center name not found")
+    ORGANIZATION_CENTER_CONTACT_NOT_FOUND = ('organization_center_contact_not_found',"Organization center contact not found")
+    ORGANIZATION_CENTER_CONTACT_ALREADY_EXISTS = ('organization_center_contact_already_exists',"Organization center contact already exists")
 
     
     
