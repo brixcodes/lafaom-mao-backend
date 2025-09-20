@@ -210,7 +210,7 @@ async def create_job_application(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description + " (" + payment["message"] + ")" ,
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description ,
                 error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
             ).model_dump(),
         )
@@ -220,7 +220,7 @@ async def create_job_application(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description + " (" + payment["message"] + ")",
                 error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
             ).model_dump(),
         )
