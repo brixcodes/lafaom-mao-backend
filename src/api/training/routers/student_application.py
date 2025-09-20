@@ -220,11 +220,11 @@ async def submit_student_application(
         
     
     payment = await student_app_service.submit_student_application(application)
-    if payment["message"] == "failed":
+    if payment["success"] == False:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=BaseOutFail(
-                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description + " (" + payment["message"] + ")" ,
                 error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
             ).model_dump(),
         )

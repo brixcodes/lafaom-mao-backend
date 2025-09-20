@@ -70,6 +70,7 @@ class InitPaymentOut(BaseModel):
     transaction_id : str 
     payment_link : Optional[str] = None
     notify_url : Optional[str] = None
+    message : Optional[str]= None
     
 
 class InitPaymentOutSuccess(BaseOutSuccess):

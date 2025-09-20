@@ -17,6 +17,7 @@ from src.api.training.schemas import (
     ReclamationFilter,
     ReclamationAdminUpdateInput,
     ReclamationTypeCreateInput,
+    ReclamationTypeUpdateInput,
 )
 
 class ReclamationService:
@@ -206,6 +207,15 @@ class ReclamationService:
     async def create_reclamation_type(self, data: ReclamationTypeCreateInput) -> ReclamationType:
         """Create a new reclamation type"""
         reclamation_type = ReclamationType(**data.model_dump())
+        self.session.add(reclamation_type)
+        await self.session.commit()
+        await self.session.refresh(reclamation_type)
+        return reclamation_type
+    
+    async def update_reclamation_type(self, reclamation_type: ReclamationType, data: ReclamationTypeUpdateInput) -> ReclamationType:
+        """Update reclamation type"""
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(reclamation_type, key, value)
         self.session.add(reclamation_type)
         await self.session.commit()
         await self.session.refresh(reclamation_type)

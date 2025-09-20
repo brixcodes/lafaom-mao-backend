@@ -80,6 +80,26 @@ class PermissionEnum(str, Enum):
     CAN_CHANGE_STUDENT_APPLICATION_STATUS = "can_change_student_application_status"
     CAN_DELETE_STUDENT_ATTACHMENT = "can_delete_student_attachment"
     
+    CAN_UPDATE_RECLAMATION_TYPE = "can_update_reclamation_type"
+    CAN_CREATE_RECLAMATION_TYPE = "can_create_reclamation_type"
+    CAN_DELETE_RECLAMATION_TYPE = "can_delete_reclamation_type"
+    CAN_VIEW_RECLAMATION_TYPE = "can_view_reclamation_type"
+    
+    CAN_VIEW_RECLAMATION = "can_view_reclamation"
+    CAN_CHANGE_RECLAMATION_STATUS = "can_change_reclamation_status"
+    
+    CAN_VIEW_SPECIALTY = "can_view_specialty"
+    CAN_CREATE_SPECIALTY = "can_create_specialty"
+    CAN_UPDATE_SPECIALTY = "can_update_specialty"
+    CAN_DELETE_SPECIALTY = "can_delete_specialty"
+    
+    CAN_VIEW_ORGANIZATION_CENTER = "can_view_organization_center"
+    CAN_CREATE_ORGANIZATION_CENTER = "can_create_organization_center"
+    CAN_UPDATE_ORGANIZATION_CENTER = "can_update_organization_center"
+    CAN_DELETE_ORGANIZATION_CENTER = "can_delete_organization_center"
+    
+    CAN_VIEW_PAYMENT = "can_view_payment"
+    
     
     
 """

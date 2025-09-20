@@ -393,6 +393,14 @@ class JobOfferService:
         
         return application
     
+    async def update_job_application_payment(self,application_id: int,payment_id:str) :
+    
+        application = await self.get_job_application_by_id(application_id)
+        application.payment_id = payment_id
+        self.session.add(application)
+        await self.session.commit()
+        
+        return application
     
     # Private email methods
     async def send_application_confirmation_email(self, application: JobApplication):

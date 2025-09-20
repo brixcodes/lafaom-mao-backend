@@ -8,6 +8,7 @@ from src.api.training.schemas import (
     ReclamationCreateInput,
     ReclamationAdminUpdateInput,
     ReclamationOutSuccess,
+    ReclamationTypeUpdateInput,
     ReclamationsPageOutSuccess,
     ReclamationFilter,
     ReclamationTypeCreateInput,
@@ -86,7 +87,7 @@ async def get_my_reclamation(
 @router.get("/reclamations", response_model=ReclamationsPageOutSuccess, tags=["Admin Reclamations"])
 async def list_all_reclamations_admin(
     filters: Annotated[ReclamationFilter, Query(...)],
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_STUDENT_APPLICATION]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_RECLAMATION]))],
     reclamation_service: ReclamationService = Depends(),
 ):
     """Get paginated list of all reclamations (admin)"""
@@ -103,7 +104,7 @@ async def list_all_reclamations_admin(
 @router.get("/reclamations/{reclamation_id}", response_model=ReclamationOutSuccess, tags=["Admin Reclamations"])
 async def get_reclamation_admin(
     reclamation_id: int,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_STUDENT_APPLICATION]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_RECLAMATION]))],
     reclamation=Depends(get_reclamation),
 ):
     """Get reclamation by ID (admin)"""
@@ -114,7 +115,7 @@ async def get_reclamation_admin(
 async def update_reclamation_status(
     reclamation_id: int,
     input: ReclamationAdminUpdateInput,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CHANGE_STUDENT_APPLICATION_STATUS]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CHANGE_RECLAMATION_STATUS]))],
     reclamation=Depends(get_reclamation),
     reclamation_service: ReclamationService = Depends(),
 ):
@@ -123,16 +124,6 @@ async def update_reclamation_status(
     return {"message": "Reclamation status updated successfully", "data": reclamation}
 
 
-@router.delete("/reclamations/{reclamation_id}", response_model=ReclamationOutSuccess, tags=["Admin Reclamations"])
-async def delete_reclamation_admin(
-    reclamation_id: int,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_STUDENT_ATTACHMENT]))],
-    reclamation=Depends(get_reclamation),
-    reclamation_service: ReclamationService = Depends(),
-):
-    """Delete reclamation (admin)"""
-    reclamation = await reclamation_service.delete_reclamation(reclamation)
-    return {"message": "Reclamation deleted successfully", "data": reclamation}
 
 
 # Reclamation Types Endpoints
@@ -148,9 +139,59 @@ async def get_active_reclamation_types(
 @router.post("/reclamation-types", response_model=ReclamationTypeOutSuccess, tags=["Reclamation Types"])
 async def create_reclamation_type(
     input: ReclamationTypeCreateInput,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_RECLAMATION_TYPE]))],
     reclamation_service: ReclamationService = Depends(),
 ):
     """Create a new reclamation type (admin)"""
     reclamation_type = await reclamation_service.create_reclamation_type(input)
     return {"message": "Reclamation type created successfully", "data": reclamation_type}
+
+@router.get("/reclamation-types/{type_id}", response_model=ReclamationTypeOutSuccess, tags=["Reclamation Types"])
+async def get_reclamation_type(
+    type_id: int,
+    reclamation_service: ReclamationService = Depends(),
+):
+    """Get reclamation type by ID"""
+    reclamation_type = await reclamation_service.get_reclamation_type_by_id(type_id)
+    if reclamation_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Reclamation type not found",
+                error_code="RECLAMATION_TYPE_NOT_FOUND",
+            ).model_dump(),
+        )
+    return {"message": "Reclamation type fetched successfully", "data": reclamation_type}
+
+
+@router.put("/reclamation-types/{type_id}", response_model=ReclamationTypeOutSuccess, tags=["Reclamation Types"])
+async def update_reclamation_type(
+    type_id: int,
+    input: ReclamationTypeUpdateInput,
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_RECLAMATION_TYPE]))],
+    reclamation_service: ReclamationService = Depends(),
+):
+    """Update reclamation type (admin)"""
+    reclamation_type = await reclamation_service.get_reclamation_type_by_id(type_id)
+    if reclamation_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Reclamation type not found",
+                error_code="RECLAMATION_TYPE_NOT_FOUND",
+            ).model_dump(),
+        )
+    
+    reclamation_type = await reclamation_service.update_reclamation_type(reclamation_type, input)
+    return {"message": "Reclamation type updated successfully", "data": reclamation_type}
+
+
+@router.delete("/reclamation-types/{type_id}", response_model=ReclamationTypeOutSuccess, tags=["Reclamation Types"])
+async def delete_reclamation_type(
+    type_id: int,
+current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_RECLAMATION_TYPE]))],
+    reclamation_service: ReclamationService = Depends(),
+):
+    """Delete reclamation type (admin)"""
+    reclamation_type = await reclamation_service.delete_reclamation_type(type_id)
+    return {"message": "Reclamation type deleted successfully", "data": reclamation_type}

@@ -22,7 +22,7 @@ router = APIRouter()
 
 @router.get("/organization-centers", response_model=OrganizationCentersPageOutSuccess, tags=["Organization Centers"])
 async def read_organization_centers_list(
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_ORGANIZATION_CENTER]))],
     filter_query: Annotated[OrganizationCenterFilter, Query(...)],
     org_service: OrganizationCenterService = Depends()
 ):
@@ -41,7 +41,7 @@ async def read_organization_centers_list(
 @router.post("/organization-centers", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
 async def create_organization_center(
     organization_create_input: CreateOrganizationCenterInput,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_ORGANIZATION_CENTER]))],
     org_service: OrganizationCenterService = Depends()
 ):
     """Create a new organization center"""
@@ -74,7 +74,7 @@ async def create_organization_center(
 
 @router.get("/organization-centers/{organization_id}", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
 async def read_organization_center_by_id(
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_ORGANIZATION_CENTER]))],
     organization: Annotated[OrganizationCenter, Depends(get_organization_center)]
 ):
     """Get organization center by ID"""
@@ -83,7 +83,7 @@ async def read_organization_center_by_id(
 
 @router.put("/organization-centers/{organization_id}", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
 async def update_organization_center(
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_ORGANIZATION_CENTER]))],
     organization_id: int,
     organization_update_input: UpdateOrganizationCenterInput,
     organization: Annotated[OrganizationCenter, Depends(get_organization_center)],
@@ -120,7 +120,7 @@ async def update_organization_center(
 
 @router.post("/organization-centers/change-status/{organization_id}", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
 async def update_organization_center_status(
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_ORGANIZATION_CENTER]))],
     organization_id: int,
     status_update_input: UpdateOrganizationStatusInput,
     organization: Annotated[OrganizationCenter, Depends(get_organization_center)],
@@ -135,7 +135,7 @@ async def update_organization_center_status(
 @router.delete("/organization-centers/{organization_id}", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
 async def delete_organization_center(
     organization_id: int,
-    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_USER]))],
+    current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_DELETE_ORGANIZATION_CENTER]))],
     organization: Annotated[OrganizationCenter, Depends(get_organization_center)],
     org_service: OrganizationCenterService = Depends(),
 ):

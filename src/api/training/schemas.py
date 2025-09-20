@@ -341,6 +341,10 @@ class ReclamationFilter(BaseModel):
     asc: Literal["asc", "desc"] = "desc"
 
 # Reclamation Type Schemas
+class ReclamationTypeUpdateInput(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
 class ReclamationTypeCreateInput(BaseModel):
     name: str
     description: Optional[str] = None

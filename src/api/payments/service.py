@@ -7,6 +7,8 @@ from fastapi import Depends
 import httpx
 from sqlalchemy import func, or_
 from sqlmodel import select
+from src.api.job_offers.service import JobOfferService
+from src.api.training.models import StudentApplication
 from src.config import settings
 from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
 from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInput
@@ -176,12 +178,13 @@ class PaymentService:
         
         try:
             if is_swallow:
-                cinetpay_payment = await cinetpay_client.initiate_cinetpay_swallow_payment(cinetpay_data)
+                result = await cinetpay_client.initiate_cinetpay_swallow_payment(cinetpay_data)
             else :
-                cinetpay_payment = await cinetpay_client.initiate_cinetpay_payment( cinetpay_data)
+                result = await cinetpay_client.initiate_cinetpay_payment( cinetpay_data)
         except Exception as e:
             return {
-                "message": "failed",
+                "success": False,
+                "message":"unable to initiate payment",
                 "amount": payment_data.amount,
                 "payment_link": None,
                 "transaction_id": None,
@@ -189,7 +192,20 @@ class PaymentService:
                 "notify_url": settings.CINETPAY_NOTIFY_URL
             }
         
-        payment.payment_type_id = str(cinetpay_payment.transaction_id)
+        if result["status"] == "success":
+            cinetpay_payment = result["data"]
+        else:
+            return {
+                "success": False,
+                "message": result["message"],
+                "amount": payment_data.amount,
+                "payment_link": None,
+                "transaction_id": None,
+                "payment_provider": payment_data.payment_provider,
+                "notify_url": settings.CINETPAY_NOTIFY_URL
+            }
+        
+        payment.payment_type_id = str(cinetpay_payment.id)
         payment.payment_type = cinetpay_payment.__class__.__name__
         
         self.session.add(payment)
@@ -197,12 +213,13 @@ class PaymentService:
         await self.session.refresh(payment)
         
         return {
-            "message": "success",
+            "success": True,
             "payment_provider": payment_data.payment_provider,
             "amount" : payment_data.amount,
             "payment_link": cinetpay_payment.payment_url,
             "transaction_id": cinetpay_payment.transaction_id,
-            "notify_url": settings.CINETPAY_NOTIFY_URL
+            "notify_url": settings.CINETPAY_NOTIFY_URL,
+            "message": ''
         }
         
     async def get_payment_by_id(self, payment_id: str):
@@ -237,6 +254,17 @@ class PaymentService:
                     cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.amount_received = result["data"]["amount"]
                     
+                    if payment.payable_type == "JobApplication":
+                        job_application_service = JobOfferService(session=self.session)
+                        job_offer = await job_application_service.update_job_application_payment(payment_id=int(payment.id),application_id=payment.payable_id)
+                    
+                    elif payment.payable_type == "StudentApplication":
+                        statement = select(StudentApplication).where(StudentApplication.id == payment.payable_id)
+                        result = await self.session.execute(statement)
+                        student_application = result.scalars().one()
+                        student_application.payment_id = payment.id
+                        await self.session.commit()
+                        await self.session.refresh(student_application)
                     
                 elif result["data"]["status"] == "REFUSED":
                     payment.status = PaymentStatusEnum.REFUSED.value
@@ -248,32 +276,7 @@ class PaymentService:
 
         return payment
     
-    @staticmethod
-    @shared_task
-    async def check_cash_in_status(transaction_id : str ) -> dict :
-        
-        async def _check():
-            async for session in get_session():
-                payment_service = PaymentService(session=session)
-
-                payment = await payment_service.get_payment_by_transaction_id(transaction_id)
-                if payment is None:
-                    return {
-                        "message": "failed",
-                        "data": None,
-                    }
-
-                if payment.status == PaymentStatusEnum.PENDING:
-                    # Assuming this is async too
-                    payment = await payment_service.check_payment_status(transaction_id)
-
-                return {
-                    "message": "success",
-                    "data": payment,
-                }
-
-        return asyncio.run(_check())
-
+   
 
 class CinetPayService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
@@ -320,7 +323,15 @@ class CinetPayService:
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
             
-            print(response.json(),payload)
+            print(response.status_code,response.json(),payload)
+            if response.status_code == 400:
+                data = response.json()
+                return {
+                    "status": "error",
+                    "code":data["code"] ,
+                    "message": data["message"] + " : " + data["description"]
+                }
+                
             response.raise_for_status()
             data = response.json()
 
@@ -343,7 +354,10 @@ class CinetPayService:
                 self.session.add(db_payment)
                 await self.session.commit()
                 await self.session.refresh(db_payment)
-                return db_payment
+                return {
+                    "status": "success",
+                    "data": db_payment
+                }
             else:
                 print(data["message"])
                 raise Exception(data["message"])

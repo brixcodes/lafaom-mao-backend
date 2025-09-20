@@ -436,3 +436,11 @@ class StudentApplicationService:
         
         return student_application
         
+    async def update_student_application_payment(self,application_id: int,payment_id:str):
+    
+        application = await self.get_student_application_by_id(application_id)
+        application.payment_id = payment_id
+        self.session.add(application)
+        await self.session.commit()
+        
+        return application
