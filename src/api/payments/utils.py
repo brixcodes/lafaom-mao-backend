@@ -16,7 +16,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
     """
 
     async def _check():
-        async with get_session() as session:
+        async for session in get_session():
             payment_service = PaymentService(session=session)
 
             payment = await payment_service.get_payment_by_transaction_id(transaction_id)
@@ -26,19 +26,6 @@ def check_cash_in_status(transaction_id: str) -> dict:
             if payment.status == PaymentStatusEnum.PENDING:
                 payment = await payment_service.check_payment_status(transaction_id)
 
-            if payment.status == PaymentStatusEnum.ACCEPTED:
-                if payment.payable_type == "JobApplication":
-                    job_service = JobOfferService(session=session)
-                    await job_service.update_job_application_payment(
-                        payment_id=int(payment.id),
-                        application_id=payment.payable_id,
-                    )
-                elif payment.payable_type == "StudentApplication":
-                    student_service = StudentApplicationService(session=session)
-                    await student_service.update_student_application_payment(
-                        payment_id=int(payment.id),
-                        application_id=payment.payable_id,
-                    )
 
             return {"message": "success", "data": payment}
 
