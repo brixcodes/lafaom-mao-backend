@@ -146,9 +146,10 @@ class TrainingSessionOutSuccess(BaseOutSuccess):
 class TrainingSessionsPageOutSuccess(BaseOutPage):
     data: List[TrainingSessionOut]
     
-    
-    
-    
+
+class PayTrainingFeeInstallmentInput(BaseModel):
+    training_session_id: str
+    amount: float
 
 # Specialty Schemas
 class SpecialtyCreateInput(BaseModel):
@@ -372,3 +373,5 @@ class ReclamationTypeOutSuccess(BaseOutSuccess):
 
 class ReclamationTypeListOutSuccess(BaseOutSuccess):
     data: List[ReclamationTypeOut]
+    
+

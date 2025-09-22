@@ -194,8 +194,11 @@ class ErrorMessage(Enum):
     ORGANIZATION_CENTER_NAME_NOT_FOUND = ('organization_center_name_not_found',"Organization center name not found")
     ORGANIZATION_CENTER_CONTACT_NOT_FOUND = ('organization_center_contact_not_found',"Organization center contact not found")
     ORGANIZATION_CENTER_CONTACT_ALREADY_EXISTS = ('organization_center_contact_already_exists',"Organization center contact already exists")
-
+    YOU_ARE_NOT_REGISTERED_FOR_THIS_TRAINING_SESSION = ('you_are_not_registered_for_this_training_session',"You are not registered for this training session")
     
+    TRAINING_FEE_ALREADY_PAID = ('training_fee_already_paid',"Training fee already paid")
+    
+    TRAINING_FEE_INSTALLMENT_AMOUNT_TOO_SMALL = ('training_fee_installment_amount_too_small',"Training fee installment amount too small")
     
     def __str__(self):
         return self.value

@@ -5,10 +5,12 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, or_
 
+from src.api.user.models import User
 from src.database import get_session_async
 from src.api.training.models import (
     Training,
     TrainingSession,
+    TrainingSessionParticipant,
 )
 from src.api.training.schemas import (
     TrainingCreateInput,
@@ -186,3 +188,9 @@ class TrainingService:
         self.session.add(training_session)
         await self.session.commit()
         return training_session
+    
+    
+    async def get_training_session_members(self, session_id: str) -> List[User]:
+        statement = select(User).join(TrainingSessionParticipant, User.id == TrainingSessionParticipant.user_id).where(TrainingSessionParticipant.session_id == session_id)
+        result = await self.session.execute(statement)
+        return result.scalars().all()

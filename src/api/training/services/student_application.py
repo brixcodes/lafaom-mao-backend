@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
 
+from src.api.job_offers.models import ApplicationStatusEnum
 from src.database import get_session_async
 from src.api.training.models import (
+    TrainingFeeInstallmentPayment,
     TrainingSession,
     StudentApplication,
     StudentAttachment,
@@ -17,6 +19,7 @@ from src.api.training.models import (
 )
 from src.api.training.schemas import (
     ChangeStudentApplicationStatusInput,
+    PayTrainingFeeInstallmentInput,
     StudentApplicationCreateInput,
     StudentApplicationFilter,
     StudentAttachmentInput,
@@ -170,12 +173,22 @@ class StudentApplicationService:
                     return {"message": "failed", "reason": f"MISSING_ATTACHMENT:{required}"}
 
         amount = target_session.registration_fee or 0.0
+        
+        tr_stmt = select(Training).where(Training.id == target_session.training_id)
+        tr_res = await self.session.execute(tr_stmt)
+        training = tr_res.scalars().first()
+        # Format dates (use only if available)
+        start_str = target_session.start_date.strftime("%B %Y") if target_session.start_date else "Undated"
+        cohort = f"Cohort {target_session.id[:6].upper()}"  # short unique label
+
+        fullname = f"{training.title} – {start_str} {cohort}"
+        
         payment_service = PaymentService(self.session)
         payment_input = PaymentInitInput(
             payable=application,
             amount=amount,
             product_currency=target_session.currency,
-            description=f"Payment for training application fee of session {target_session.id}",
+            description=f"Payment for training application fee of session {fullname}",
             payment_provider="CINETPAY",
         )
         try :
@@ -319,6 +332,7 @@ class StudentApplicationService:
         participant = TrainingSessionParticipant(
             session_id=application.target_session_id,
             user_id=application.user_id,
+            application_id=application.id,
             joined_at=datetime.now(timezone.utc),
         )
         self.session.add(participant)
@@ -434,6 +448,9 @@ class StudentApplicationService:
         await self.session.commit()
         await self.session.refresh(student_application)
         
+        if input.status == ApplicationStatusEnum.APPROVED.value:
+            await self.enroll_student_to_session(student_application)
+        
         return student_application
         
     async def update_student_application_payment(self,application_id: int,payment_id:str):
@@ -444,3 +461,135 @@ class StudentApplicationService:
         await self.session.commit()
         
         return application
+    
+    
+    async def make_training_installment_fee_payment(self,user_id: str,input:PayTrainingFeeInstallmentInput):
+        
+        statement = (
+            select(StudentApplication).where(StudentApplication.user_id == user_id)
+            .where(StudentApplication.target_session_id == input.training_session_id)
+            .where(StudentApplication.payment_id != None).where(StudentApplication.delete_at.is_(None))
+        )
+        result = await self.session.execute(statement)
+        registration = result.scalars().first()
+        
+        if not registration:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.YOU_ARE_NOT_REGISTERED_FOR_THIS_TRAINING_SESSION.description,
+                    error_code=ErrorMessage.YOU_ARE_NOT_REGISTERED_FOR_THIS_TRAINING_SESSION.value,
+                ).model_dump(),
+            )
+        
+        statement = (
+            select(TrainingSession).where(TrainingSession.id == input.training_session_id)
+            .where(TrainingSession.delete_at.is_(None))
+        )
+        result = await self.session.execute(statement)
+        training_session = result.scalars().first()
+        
+        if not training_session:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.TRAINING_SESSION_NOT_FOUND.description,
+                    error_code=ErrorMessage.TRAINING_SESSION_NOT_FOUND.value,
+                ).model_dump(),
+            )
+        
+        statement = (
+            select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.application_id == registration.id)
+            .where(TrainingFeeInstallmentPayment.training_session_id == input.training_session_id)
+            .where(TrainingFeeInstallmentPayment.User_id == user_id).where(TrainingFeeInstallmentPayment.payment_id != None)
+            .where(Training.delete_at.is_(None))
+        )
+        result = await self.session.execute(statement)
+        payments = result.scalars().all()
+        
+        installment = training_session.installment_percentage
+        
+        if installment is None or len(installment)==0:
+            installment = [100]
+        
+        amount_paid = 0
+        installment_number = 1
+        for payment in payments:
+            amount_paid += payment.amount
+            installment_number += 1
+        
+        
+        amount_left_to_pay = training_session.training_fee - amount_paid
+        
+        if amount_left_to_pay <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.TRAINING_FEE_ALREADY_PAID.description,
+                    error_code=ErrorMessage.TRAINING_FEE_ALREADY_PAID.value,
+                ).model_dump(),
+            )
+        
+        amount_to_pay = training_session.training_fee * (installment[installment_number-1] / 100)
+        
+        if amount_to_pay > amount_left_to_pay:
+            amount_to_pay = amount_left_to_pay
+        
+        if amount_to_pay < input.amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.TRAINING_FEE_INSTALLMENT_AMOUNT_TOO_SMALL.description,
+                    error_code=ErrorMessage.TRAINING_FEE_INSTALLMENT_AMOUNT_TOO_SMALL.value,
+                ).model_dump(),
+            )
+        
+        if input.amount > amount_left_to_pay:
+            input.amount = amount_left_to_pay
+        
+        
+        new_payment = TrainingFeeInstallmentPayment(
+            amount=input.amount,
+            training_session_id=input.training_session_id,
+            application_id=registration.id,
+            User_id=user_id,
+            installment_number=installment_number,
+            rest_to_pay=amount_left_to_pay - input.amount,
+            currency=training_session.currency
+        )
+        self.session.add(new_payment)
+        await self.session.commit()
+        await self.session.refresh(new_payment)
+        
+        tr_stmt = select(Training).where(Training.id == training_session.training_id)
+        tr_res = await self.session.execute(tr_stmt)
+        training = tr_res.scalars().first()
+        # Format dates (use only if available)
+        start_str = training_session.start_date.strftime("%B %Y") if training_session.start_date else "Undated"
+        cohort = f"Cohort {training_session.id[:6].upper()}"  # short unique label
+
+        fullname = f"{training.title} – {start_str} {cohort}"
+        
+        payment_service = PaymentService(self.session)
+        payment_input = PaymentInitInput(
+            payable=new_payment,
+            amount=input.amount,
+            product_currency=training_session.currency,
+            description=f"Payment for training fee of session {fullname}",
+            payment_provider="CINETPAY",
+        )
+        try :
+            payment = await payment_service.initiate_payment(payment_input)
+            
+        except Exception as e:
+            print(e.with_traceback(sys.exc_info()[2]))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=BaseOutFail(
+                    message=ErrorMessage.PAYMENT_INITIATION_FAILED.description,
+                    error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
+                ).model_dump(),
+            )
+        return payment
+        
+    

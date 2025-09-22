@@ -21,6 +21,7 @@ from src.api.training.dependencies import (
     get_training,
     get_training_session,
 )
+from src.api.user.schemas import UserListOutSuccess
 from src.helper.schemas import BaseOutFail, ErrorMessage
 
 router = APIRouter()
@@ -137,6 +138,16 @@ async def create_training_session(
     session = await training_service.create_training_session(input)
     return {"message": "Training session created successfully", "data": session}
 
+
+@router.get("/training-sessions/{session_id}/members", response_model=UserListOutSuccess, tags=["Training Session"])
+async def get_training_session_members(
+    session_id: str,
+    training_session=Depends(get_training_session),
+    training_service: TrainingService = Depends(),
+):
+    
+    members = await training_service.get_training_session_members(session_id)
+    return {"message": "Training session members fetched successfully", "data": members}
 
 @router.get("/training-sessions/{session_id}", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def get_training_session_route(

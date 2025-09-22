@@ -8,6 +8,7 @@ from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.training.services import StudentApplicationService
 from src.api.training.schemas import (
     ChangeStudentApplicationStatusInput,
+    PayTrainingFeeInstallmentInput,
     StudentApplicationFilter,
     StudentApplicationsPageOutSuccess,
     StudentAttachmentInput,
@@ -220,6 +221,25 @@ async def submit_student_application(
         
     
     payment = await student_app_service.submit_student_application(application)
+    if payment["success"] == False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.PAYMENT_INITIATION_FAILED.description + " (" + payment["message"] + ")" ,
+                error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
+            ).model_dump(),
+        )
+    return {"message": "Application submitted successfully", "data": {"payment": payment}}
+
+
+@router.post("/my-student-applications/pay-training-fee", response_model=InitPaymentOutSuccess, tags=["My Student Application"])
+async def submit_student_application(
+    input: PayTrainingFeeInstallmentInput,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    student_app_service: StudentApplicationService = Depends(),
+):
+    
+    payment = await student_app_service.make_training_installment_fee_payment(user_id=current_user.id, input=input)
     if payment["success"] == False:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

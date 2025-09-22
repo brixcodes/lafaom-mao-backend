@@ -82,6 +82,11 @@ class TrainingSessionParticipant(CustomBaseModel, table=True):
 
     session_id: str = Field(foreign_key="training_sessions.id", nullable=False)
     user_id: str = Field(foreign_key="users.id", nullable=False)
+    application_id: Optional[int] = Field(default=None, index=True, unique=True)
+    
+    # Relationships
+    training_session: Optional[TrainingSession] = Relationship()
+    user: Optional[User] = Relationship()
     
 
 
@@ -119,7 +124,20 @@ class StudentAttachment(CustomBaseModel, table=True):
     document_type: str = Field(max_length=100)
     file_path: str = Field(max_length=255)
     upload_date: Optional[datetime] = Field(default=None)
+
+
+class TrainingFeeInstallmentPayment(CustomBaseModel, table=True):
+    __tablename__ = "training_fee_installment_payments"
     
+    User_id: str = Field(foreign_key="users.id", nullable=False)
+    training_session_id: str = Field(foreign_key="training_sessions.id", nullable=False)
+    application_id: int = Field(foreign_key="student_applications.id", nullable=False)
+    payment_id: Optional[str] = Field(foreign_key="payments.id", nullable=True)
+    installment_number: int
+    amount: float
+    rest_to_pay: float
+    currency: str
+
 
 class Specialty(CustomBaseModel, table=True):
     __tablename__ = "specialty"
