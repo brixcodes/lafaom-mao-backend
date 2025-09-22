@@ -178,3 +178,7 @@ class PermissionOutSuccess(BaseOutSuccess):
     
 class PermissionListOutSuccess(BaseOutSuccess):
     data : List[PermissionOut]
+    
+    
+class PermissionSmallListOutSuccess(BaseOutSuccess):
+    data : List[str]

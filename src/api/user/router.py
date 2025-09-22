@@ -9,12 +9,12 @@ from src.api.user.dependencies import get_user
 from src.api.user.models import PermissionEnum, RoleEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
-from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, UpdateStatusInput, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
+from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, PermissionSmallListOutSuccess, RoleListOutSuccess, UpdateStatusInput, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
 
 router = APIRouter()
 
 
-@router.post('/users/assign-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.post('/users/assign-permissions',response_model=PermissionListOutSuccess,tags=["Role And Permission"])
 async def assign_permissions(
     input : AssignPermissionsInput,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
@@ -28,7 +28,7 @@ async def assign_permissions(
     return  { "message" : "Permissions assigned successfully", "data" : user_permissions }
     
 
-@router.post('/users/revoke-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.post('/users/revoke-permissions',response_model=PermissionListOutSuccess,tags=["Role And Permission"])
 async def revoke_permissions(
     input : AssignPermissionsInput,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
@@ -41,7 +41,7 @@ async def revoke_permissions(
     
     return  { "message" : "Permissions revoked successfully", "data" : user_permissions }
 
-@router.post('/users/assign-roles',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.post('/users/assign-roles',response_model=PermissionListOutSuccess,tags=["Role And Permission"])
 async def assign_roles(
     input : AssignRoleInput,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
@@ -54,7 +54,7 @@ async def assign_roles(
     
     return  { "message" : "Roles assigned successfully", "data" : user_permissions }
 
-@router.post('/users/revoke-role',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.post('/users/revoke-role',response_model=PermissionListOutSuccess,tags=["Role And Permission"])
 async def revoke_roles(
     input : AssignRoleInput,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
@@ -67,7 +67,7 @@ async def revoke_roles(
     
     return  { "message" : "Roles revoked successfully", "data" : user_permissions }
 
-@router.get('/users/permissions/{user_id}',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.get('/users/permissions/{user_id}',response_model=PermissionListOutSuccess,tags=["Role And Permission"])
 async def get_user_permissions(
     user_id : str,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
@@ -186,6 +186,19 @@ async def delete_user(
     return {"data" : user, "message":"Users updated successfully" }   
 
 
+@router.get('/roles',response_model=RoleListOutSuccess,tags=["Role And Permission"])
+async def get_roles(
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_ROLE]))],
+    user_service: UserService = Depends()):
+    roles = await user_service.get_all_roles()
+    return  {"data" : roles, "message":"Roles fetch successfully" }
+
+@router.get('/permissions',response_model=PermissionSmallListOutSuccess,tags=["Role And Permission"])
+async def get_permissions(
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_ROLE]))],
+    user_service: UserService = Depends()):
+    permissions = await user_service.get_all_permissions()
+    return  {"data" : permissions, "message":"Permissions fetch successfully" }
 
 
 

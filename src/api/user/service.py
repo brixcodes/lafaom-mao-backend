@@ -568,3 +568,12 @@ class UserService:
         
         return False
 
+    async def get_all_roles(self):
+        statement = select(Role)
+        result = await self.session.execute(statement)
+        roles = result.scalars().all()
+        return roles
+
+    async def get_all_permissions(self):
+        return [perm.value for perm in PermissionEnum]
+    
