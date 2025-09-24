@@ -229,11 +229,11 @@ async def submit_student_application(
                 error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
             ).model_dump(),
         )
-    return {"message": "Application submitted successfully", "data": {"payment": payment}}
+    return {"message": "Application submitted successfully", "data": payment}
 
 
 @router.post("/my-student-applications/pay-training-fee", response_model=InitPaymentOutSuccess, tags=["My Student Application"])
-async def submit_student_application(
+async def pay_training_fee(
     input: PayTrainingFeeInstallmentInput,
     current_user: Annotated[User, Depends(get_current_active_user)],
     student_app_service: StudentApplicationService = Depends(),
@@ -248,4 +248,4 @@ async def submit_student_application(
                 error_code=ErrorMessage.PAYMENT_INITIATION_FAILED.value,
             ).model_dump(),
         )
-    return {"message": "Application submitted successfully", "data": {"payment": payment}}
+    return {"message": "Application submitted successfully", "data": payment}

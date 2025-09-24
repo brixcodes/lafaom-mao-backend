@@ -193,7 +193,7 @@ async def get_roles(
     roles = await user_service.get_all_roles()
     return  {"data" : roles, "message":"Roles fetch successfully" }
 
-@router.get('/permissions',response_model=PermissionSmallListOutSuccess,tags=["Role And Permission"])
+@router.get('/permissions',response_model=PermissionSmallListOutSuccess ,tags=["Role And Permission"])
 async def get_permissions(
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_ROLE]))],
     user_service: UserService = Depends()):
