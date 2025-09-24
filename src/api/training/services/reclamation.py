@@ -196,6 +196,26 @@ class ReclamationService:
         await self.session.refresh(reclamation)
         return reclamation
 
+    async def update_reclamation(self, reclamation_id: int, data: ReclamationCreateInput, user_id: str) -> Reclamation:
+        """Update a reclamation by user"""
+        # Get the reclamation
+        reclamation = await self.get_reclamation_by_id(reclamation_id, user_id)
+        if not reclamation:
+            raise ValueError("Reclamation not found")
+        
+        # Update the reclamation fields
+        reclamation.application_number = data.application_number
+        reclamation.reclamation_type = data.reclamation_type
+        reclamation.subject = data.subject
+        reclamation.priority = data.priority
+        reclamation.description = data.description
+        reclamation.updated_at = datetime.now(timezone.utc)
+        
+        self.session.add(reclamation)
+        await self.session.commit()
+        await self.session.refresh(reclamation)
+        return reclamation
+
     async def delete_reclamation(self, reclamation: Reclamation) -> Reclamation:
         """Soft delete reclamation"""
         reclamation.delete_at = datetime.now(timezone.utc)

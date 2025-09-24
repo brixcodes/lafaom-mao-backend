@@ -83,6 +83,65 @@ async def get_my_reclamation(
     return {"message": "Reclamation fetched successfully", "data": reclamation}
 
 
+@router.put("/my-reclamations/{reclamation_id}", response_model=ReclamationOutSuccess, tags=["My Reclamations"])
+async def update_my_reclamation(
+    reclamation_id: int,
+    input: ReclamationCreateInput,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    reclamation_service: ReclamationService = Depends(),
+    student_app_service: StudentApplicationService = Depends(),
+):
+    """Update a reclamation by user"""
+    # Vérifier que la réclamation appartient à l'utilisateur
+    existing_reclamation = await reclamation_service.get_reclamation_by_id(reclamation_id, user_id=current_user.id)
+    if existing_reclamation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Reclamation not found",
+                error_code="RECLAMATION_NOT_FOUND",
+            ).model_dump(),
+        )
+    
+    # Vérifier que la candidature appartient à l'utilisateur
+    application = await student_app_service.get_student_application_by_application_number(input.application_number, current_user.id)
+    if application is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.STUDENT_APPLICATION_NOT_FOUND.description,
+                error_code=ErrorMessage.STUDENT_APPLICATION_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    
+    # Mettre à jour la réclamation
+    updated_reclamation = await reclamation_service.update_reclamation(reclamation_id, input, user_id=current_user.id)
+    return {"message": "Reclamation updated successfully", "data": updated_reclamation}
+
+
+@router.delete("/my-reclamations/{reclamation_id}", response_model=ReclamationOutSuccess, tags=["My Reclamations"])
+async def delete_my_reclamation(
+    reclamation_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    reclamation_service: ReclamationService = Depends(),
+):
+    """Delete a reclamation by user"""
+    # Vérifier que la réclamation appartient à l'utilisateur
+    existing_reclamation = await reclamation_service.get_reclamation_by_id(reclamation_id, user_id=current_user.id)
+    if existing_reclamation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Reclamation not found",
+                error_code="RECLAMATION_NOT_FOUND",
+            ).model_dump(),
+        )
+    
+    # Supprimer la réclamation (soft delete)
+    deleted_reclamation = await reclamation_service.delete_reclamation(existing_reclamation)
+    return {"message": "Reclamation deleted successfully", "data": deleted_reclamation}
+
+
 # Admin Reclamation Endpoints
 @router.get("/reclamations", response_model=ReclamationsPageOutSuccess, tags=["Admin Reclamations"])
 async def list_all_reclamations_admin(
