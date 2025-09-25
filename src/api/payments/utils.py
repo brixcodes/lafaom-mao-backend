@@ -12,7 +12,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
     Celery task to check cash-in status for a payment.
     """
 
-    for session in get_session():
+    with get_session() as session:
             payment_statement = select(Payment).where(Payment.transaction_id == transaction_id)
             payment = session.scalars(payment_statement).first()
             
