@@ -55,7 +55,7 @@ async def change_student_application_status_admin(
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_VIEW_STUDENT_APPLICATION]))],
     student_app_service: StudentApplicationService = Depends(),
 ):
-    application = await student_app_service.get_student_application_by_id(application_id, current_user.id)
+    application = await student_app_service.get_student_application_by_id(application_id)
     if application is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
