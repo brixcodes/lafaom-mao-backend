@@ -249,7 +249,7 @@ class PaymentService:
             else :
                 result = await  CinetPayService.check_cinetpay_payment_status(payment.transaction_id)
                 
-                if result["data"]["status"] == "ACCEPTED":
+                if result["data"]["status"] : #== "ACCEPTED":
                     payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.amount_received = result["data"]["amount"]
