@@ -13,7 +13,6 @@ from src.api.training.schemas import (
     StudentApplicationsPageOutSuccess,
     StudentAttachmentInput,
     StudentApplicationCreateInput,
-    StudentApplicationSubmitInput,
     StudentApplicationOutSuccess,
     StudentAttachmentOutSuccess,
     StudentAttachmentListOutSuccess,

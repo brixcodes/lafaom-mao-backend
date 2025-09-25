@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query ,status
 from src.api.auth.utils import check_permissions
 from src.api.system.service import OrganizationCenterService
+from src.api.training.services.specialty import SpecialtyService
 from src.api.user.models import PermissionEnum, User
 from src.api.training.services import TrainingService
 from src.api.training.schemas import (
@@ -40,9 +41,8 @@ async def list_trainings(
 async def create_training(
     input: TrainingCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING]))],
-    training_service: TrainingService = Depends() #,specialty_service: SpecialtyService = Depends(),
+    training_service: TrainingService = Depends(),specialty_service: SpecialtyService = Depends(),
 ):
-    """"
     specialty = await specialty_service.get_specialty_by_id(input.specialty_id)
     if specialty is None:
         raise HTTPException(
@@ -52,18 +52,7 @@ async def create_training(
                 error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
             ).model_dump()
         )
-    """
-    try:
-        training = await training_service.create_training(input)
-    except :
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=BaseOutFail(
-                message=ErrorMessage.SPECIALTY_NOT_FOUND.description,
-                error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
-            ).model_dump()
-        )
-    
+    training = await training_service.create_training(input)
     return {"message": "Training created successfully", "data": training}
 
 
@@ -81,9 +70,8 @@ async def update_training_route(
     input: TrainingUpdateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_TRAINING]))],
     training=Depends(get_training),
-    training_service: TrainingService = Depends() #,specialty_service: SpecialtyService = Depends(),
+    training_service: TrainingService = Depends(),specialty_service: SpecialtyService = Depends(),
 ):
-    """"
     if input.specialty_id is not None:
         
         specialty = await specialty_service.get_specialty_by_id(input.specialty_id)
@@ -95,18 +83,7 @@ async def update_training_route(
                     error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
                 ).model_dump()
         )
-    """
-    try:
-        training = await training_service.get_training_by_id(training_id)
-    except :
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=BaseOutFail(
-                message=ErrorMessage.SPECIALTY_NOT_FOUND.description,
-                error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
-            ).model_dump()
-        )
-    
+    training = await training_service.update_training(training, input)
     return {"message": "Training updated successfully", "data": training}
 
 
