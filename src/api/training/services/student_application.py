@@ -2,7 +2,7 @@ import sys
 from typing import List, Optional, Tuple
 from datetime import date, datetime, timezone
 from fastapi import Depends, HTTPException ,status
-from sqlalchemy import func, update ,cast ,String
+from sqlalchemy import func, update 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
@@ -28,7 +28,6 @@ from src.api.user.service import UserService
 from src.api.user.models import User, UserTypeEnum
 from src.api.payments.schemas import PaymentInitInput
 from src.api.payments.service import PaymentService
-from src.api.payments.models import Payment, PaymentStatusEnum
 from src.config import settings
 from src.helper.file_helper import FileHelper
 from src.helper.moodle import MoodleService

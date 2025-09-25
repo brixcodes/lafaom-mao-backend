@@ -41,8 +41,9 @@ async def list_trainings(
 async def create_training(
     input: TrainingCreateInput,
     current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_CREATE_TRAINING]))],
-    training_service: TrainingService = Depends(),specialty_service: SpecialtyService = Depends(),
+    training_service: TrainingService = Depends() #,specialty_service: SpecialtyService = Depends(),
 ):
+    """"
     specialty = await specialty_service.get_specialty_by_id(input.specialty_id)
     if specialty is None:
         raise HTTPException(
@@ -52,7 +53,18 @@ async def create_training(
                 error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
             ).model_dump()
         )
-    training = await training_service.create_training(input)
+    """
+    try:
+        training = await training_service.create_training(input)
+    except :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                message=ErrorMessage.SPECIALTY_NOT_FOUND.description,
+                error_code=ErrorMessage.SPECIALTY_NOT_FOUND.value
+            ).model_dump()
+        )
+    
     return {"message": "Training created successfully", "data": training}
 
 
