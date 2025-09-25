@@ -1,11 +1,8 @@
-import asyncio
-
+from asgiref.sync import async_to_sync
 from celery import shared_task
 
-from src.api.job_offers.service import JobOfferService
 from src.api.payments.models import PaymentStatusEnum
 from src.api.payments.service import PaymentService
-from src.api.training.services.student_application import StudentApplicationService
 from src.database import get_session_async
 
 
@@ -26,8 +23,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
             if payment.status == PaymentStatusEnum.PENDING:
                 payment = await payment_service.check_payment_status(transaction_id)
 
-
             return {"message": "success", "data": payment}
 
-    # Run the async function in the synchronous Celery task
-    return asyncio.run(_check())
+    # ✅ Correctly wrap the async function
+    return async_to_sync(_check)()
