@@ -366,8 +366,8 @@ class StudentApplicationService:
         await self.session.refresh(participant)
 
         # Enrol on Moodle (best-effort)
-        try:
-            if sess and sess.moodle_course_id:
+        
+        if sess and sess.moodle_course_id:
                 user_service = UserService(self.session)
                 user = await user_service.get_by_id(application.user_id)
                 if user and user.email:
@@ -408,8 +408,7 @@ class StudentApplicationService:
                         await self.session.refresh(user)
                     await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
                     
-        except Exception:
-            pass
+
         return participant
 
     # Attachments
