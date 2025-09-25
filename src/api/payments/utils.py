@@ -18,7 +18,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
     async def _check():
         async for session in get_session_async():
             payment_service = PaymentService(session=session)
-
+            print(transaction_id)
             payment = await payment_service.get_payment_by_transaction_id(transaction_id)
             if not payment:
                 return {"message": "failed", "data": None}
