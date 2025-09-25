@@ -3,7 +3,7 @@ from typing import List
 from fastapi import Depends
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload , aliased, with_expression
-from src.api.user.schemas import UserFilter
+from src.api.user.schemas import UpdateUserInput, UserFilter
 from src.database import get_session_async
 from src.api.user.models import (Address, AddressTypeEnum, CivilityEnum, PermissionEnum, ProfessionStatus, SchoolCurriculum, User, UserPermission, UserRole, Role, RoleEnum, UserStatusEnum, UserTypeEnum)
 from src.api.auth.schemas import UpdateAddressInput, UpdateCurriculumInput, UpdateDeviceInput, UpdateProfessionStatusInput,  UpdateUserProfile
@@ -177,11 +177,14 @@ class UserService:
         users = result.scalars().all()
         return users
 
-    async def update(self, user_id, user_update_input):
+    async def update(self, user_id, user_update_input: UpdateUserInput):
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
-        for key, value in user_update_input.dict().items():
+        for key, value in user_update_input.model_dump(exclude=None).items():
+            if key == "password":
+                user.password = pwd_context.hash(value)
+                
             setattr(user, key, value)
         self.session.add(user)
         await self.session.commit()
