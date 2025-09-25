@@ -371,6 +371,7 @@ class StudentApplicationService:
                 user_service = UserService(self.session)
                 user = await user_service.get_by_id(application.user_id)
                 if user and user.email:
+                    """
                     if moodle_ensure_user_task and moodle_enrol_user_task:
                         moodle_ensure_user_task.apply_async(kwargs={
                             "email": user.email,
@@ -378,6 +379,7 @@ class StudentApplicationService:
                             "lastname": user.last_name,
                         })
                     else:
+                    
                         moodle = MoodleService()
                         moodle_user_id = user.moodle_user_id
                         if not moodle_user_id:
@@ -391,6 +393,21 @@ class StudentApplicationService:
                             await self.session.commit()
                             await self.session.refresh(user)
                         await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
+                    """
+                    moodle = MoodleService()
+                    moodle_user_id = user.moodle_user_id
+                    if not moodle_user_id:
+                        moodle_user_id = await moodle.ensure_user(
+                            email=user.email,
+                            firstname=user.first_name,
+                            lastname=user.last_name
+                        )
+                        user.moodle_user_id = moodle_user_id
+                        self.session.add(user)
+                        await self.session.commit()
+                        await self.session.refresh(user)
+                    await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
+                    
         except Exception:
             pass
         return participant
