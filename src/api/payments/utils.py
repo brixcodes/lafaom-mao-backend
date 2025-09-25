@@ -21,7 +21,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
                 print("Payment not found")
                 return {"message": "failed", "data": None}
 
-            if payment.status == PaymentStatusEnum.PENDING:
+            if payment.status == PaymentStatusEnum.PENDING.value:
                 print("Payment is pending")
                 payment = PaymentService.check_payment_status_sync(session, payment)
 
