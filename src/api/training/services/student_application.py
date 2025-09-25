@@ -220,7 +220,7 @@ class StudentApplicationService:
             )
         return payment
 
-    async def get_student_application_by_id(self, application_id: int) -> Optional[StudentApplication]:
+    async def get_student_application_by_id(self, application_id: int,user_id : Optional[str]) -> Optional[StudentApplication]:
         """Get student application by ID"""
         statement = select(StudentApplication).where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
         result = await self.session.execute(statement)
