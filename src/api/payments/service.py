@@ -297,7 +297,7 @@ class PaymentService:
                     if payment.payable_type == "JobApplication":
                         
                         job_application_statement = (
-                            select(JobApplication).where(JobApplication.id == payment.payable_id)
+                            select(JobApplication).where(JobApplication.id == int(payment.payable_id))
                             )
                         job_application = session.exec(job_application_statement).first()
                         job_application.payment_id = payment.id
@@ -305,14 +305,14 @@ class PaymentService:
                         session.refresh(job_application)
                     
                     elif payment.payable_type == "StudentApplication":
-                        statement = select(StudentApplication).where(StudentApplication.id == payment.payable_id)
+                        statement = select(StudentApplication).where(StudentApplication.id == int(payment.payable_id))
                         student_application = session.exec(statement).first()
                         student_application.payment_id = payment.id
                         session.commit()
                         
                     elif payment.payable_type == "TrainingFeeInstallmentPayment" :
                         training_fee_installment_payment_statement = (
-                            select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.id == payment.payable_id)
+                            select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.id == int(payment.payable_id))
                             )
                         training_fee_installment_payment = session.exec(training_fee_installment_payment_statement).first()
                         training_fee_installment_payment.payment_id = payment.id
