@@ -228,11 +228,7 @@ class PaymentService:
         payment = result.scalars().one()
         return payment
     
-    async def get_payment_by_transaction_id(self, transaction_id: str):
-        statement = select(Payment).where(Payment.payment_type_id == transaction_id)
-        result = await self.session.execute(statement)
-        payment = result.scalars().first()
-        return payment
+
 
     async def check_payment_status(self, payment : Payment):
         if payment.payment_type == "CinetPayPayment":
