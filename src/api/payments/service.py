@@ -276,6 +276,7 @@ class PaymentService:
     @staticmethod
     def check_payment_status_sync(session : Session, payment : Payment):
         if payment.payment_type == "CinetPayPayment":
+            print("CinetPayPayment",payment.transaction_id)
         
             cinetpay_statement = (
                 select(CinetPayPayment).where(CinetPayPayment.transaction_id == payment.transaction_id)
@@ -283,13 +284,16 @@ class PaymentService:
             cinetpay_payment = session.exec(cinetpay_statement).first()
             
             if cinetpay_payment is None:
+                print("CinetPayPayment not found")
                 
                 payment.status = PaymentStatusEnum.ERROR
                 session.commit()
             else :
                 result =   CinetPayService.check_cinetpay_payment_status_sync(payment.transaction_id)
+                print("result",result)
                 
-                if result["data"]["status"] : #== "ACCEPTED":
+                if True : #result["data"]["status"]  == "ACCEPTED":
+                    print("ACCEPTED")
                     payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.amount_received = result["data"]["amount"]

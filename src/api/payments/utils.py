@@ -15,13 +15,16 @@ def check_cash_in_status(transaction_id: str) -> dict:
     with get_session() as session:
             payment_statement = select(Payment).where(Payment.transaction_id == transaction_id)
             payment = session.scalars(payment_statement).first()
+            print(payment.model_dump())
             
             if not payment:
+                print("Payment not found")
                 return {"message": "failed", "data": None}
 
             if payment.status == PaymentStatusEnum.PENDING:
+                print("Payment is pending")
                 payment = PaymentService.check_payment_status_sync(session, payment)
 
-            return {"message": "success", "data": payment}
+            return {"message": "success", "data": payment.model_dump()}
     # ✅ Correctly wrap the async function
 
