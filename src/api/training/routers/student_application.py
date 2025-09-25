@@ -135,6 +135,30 @@ async def get_my_student_application(
         )
     return {"message": "Student application fetched successfully", "data": full_application}
 
+
+@router.put("/my-student-applications/{application_id}", response_model=StudentApplicationOutSuccess, tags=["My Student Application"])
+async def update_my_student_application(
+    application_id: int,
+    input: StudentApplicationCreateInput,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    student_app_service: StudentApplicationService = Depends(),
+):
+    """Update a student application by user"""
+    # Vérifier que la candidature appartient à l'utilisateur
+    existing_application = await student_app_service.get_student_application_by_id(application_id, user_id=current_user.id)
+    if existing_application is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message="Student application not found",
+                error_code="STUDENT_APPLICATION_NOT_FOUND",
+            ).model_dump(),
+        )
+    
+    # Mettre à jour la candidature
+    updated_application = await student_app_service.update_student_application_by_id(application_id, input, current_user.id)
+    return {"message": "Student application updated successfully", "data": updated_application}
+
 @router.delete("/my-student-applications/{application_id}", response_model=StudentApplicationOutSuccess, tags=["My Student Application"])
 async def delete_my_student_application(
     application_id: int,

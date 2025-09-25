@@ -249,6 +249,18 @@ class ReclamationService:
         )
         result = await self.session.execute(statement)
         return result.scalars().first()
+    
+    async def delete_reclamation_type(self, type_id: int) -> ReclamationType:
+        """Soft delete reclamation type"""
+        reclamation_type = await self.get_reclamation_type_by_id(type_id)
+        if not reclamation_type:
+            raise ValueError("Reclamation type not found")
+        
+        reclamation_type.delete_at = datetime.now(timezone.utc)
+        self.session.add(reclamation_type)
+        await self.session.commit()
+        await self.session.refresh(reclamation_type)
+        return reclamation_type
 
     async def get_all_reclamation_types(self) -> List[ReclamationType]:
         """Get all active reclamation types for dropdown lists"""
