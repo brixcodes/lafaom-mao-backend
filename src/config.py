@@ -5,6 +5,7 @@ from typing_extensions import Self
 import secrets
 from kombu import Queue
 
+#
 def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, str) and not v.startswith("["):
         return [i.strip() for i in v.split(",")]
