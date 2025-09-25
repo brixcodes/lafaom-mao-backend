@@ -154,6 +154,23 @@ class StudentApplicationService:
         await self.session.refresh(application)
         return application
 
+    async def update_student_application_by_id(self, application_id: int, data, user_id: str) -> StudentApplication:
+        """Update student application by ID and user ID"""
+        # Get the application
+        application = await self.get_student_application_by_id(application_id, user_id)
+        if not application:
+            raise ValueError("Student application not found")
+        
+        # Update the application
+        for key, value in data.model_dump(exclude_none=True).items():
+            setattr(application, key, value)
+        
+        application.updated_at = datetime.now(timezone.utc)
+        self.session.add(application)
+        await self.session.commit()
+        await self.session.refresh(application)
+        return application
+
     async def submit_student_application(self, application: StudentApplication) -> dict:
         """Submit student application and initiate payment"""
         # Use the target session to get fees

@@ -2,10 +2,13 @@ from datetime import date
 from pydantic import BaseModel, Field
 from typing import Any, Literal, Optional
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
 from src.api.job_offers.models import JobApplication
-from src.api.training.models import StudentApplication
 from src.helper.schemas import BaseOutSuccess,BaseOutPage
+
+# Éviter la dépendance circulaire avec TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.api.training.models import StudentApplication
 
 class CinetPayInit(BaseModel):
     transaction_id: str
@@ -25,7 +28,8 @@ class CinetPayInit(BaseModel):
     customer_zip_code : Optional[str] = None
 
 class PaymentInitInput(BaseModel):
-    payable: Union[JobApplication, StudentApplication]
+    payable_id: int
+    payable_type: str  # "JobApplication" ou "StudentApplication"
     amount: float
     product_currency: str 
     description: str
