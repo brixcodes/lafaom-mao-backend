@@ -63,3 +63,4 @@ itsdangerous
 certifi
 firebase_admin
 jwcrypto
+asgiref>=3.8,<4.0
