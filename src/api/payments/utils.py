@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 
 from celery import shared_task
 
@@ -30,4 +30,4 @@ def check_cash_in_status(transaction_id: str) -> dict:
             return {"message": "success", "data": payment}
 
     # Run the async function in the synchronous Celery task
-    return asyncio.run(_check())
+    return anyio.run(_check)
