@@ -23,7 +23,7 @@ env = Environment(loader=FileSystemLoader('src/templates'))
 class NotificationHelper :
     @staticmethod
     @shared_task  
-    async def send_in_app_notification(notify_data : dict):
+    def send_in_app_notification(notify_data : dict):
         """
         Send an in app notification to a user, given the notification data.
 
@@ -39,7 +39,7 @@ class NotificationHelper :
 
     @staticmethod
     @shared_task  
-    async def send_push_notification(notify_data : dict):
+    def send_push_notification(notify_data : dict):
         """
             Send an in app notification to a user, given the notification data.
 
@@ -72,7 +72,7 @@ class NotificationHelper :
 
     @staticmethod  
     @shared_task      
-    async def send_smtp_email(data : dict):
+    def send_smtp_email(data : dict):
     
         """
         Send an email using SMTP.
@@ -130,7 +130,7 @@ class NotificationHelper :
 
     @staticmethod  
     @shared_task
-    async def send_mailgun_email(data: dict):
+    def send_mailgun_email(data: dict):
         """
         Send an email using Mailgun API.
 

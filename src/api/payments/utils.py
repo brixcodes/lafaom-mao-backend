@@ -1,3 +1,4 @@
+import asyncio
 
 from celery import shared_task
 
@@ -9,19 +10,24 @@ from src.database import get_session_async
 
 
 @shared_task
-async def check_cash_in_status(transaction_id: str) -> dict:
+def check_cash_in_status(transaction_id: str) -> dict:
     """
     Celery task to check cash-in status for a payment.
     """
-    async for session in get_session_async(): 
-        payment_service = PaymentService(session=session)
-        print(transaction_id)
-        payment = await payment_service.get_payment_by_transaction_id(transaction_id)
-        if not payment:
-            return {"message": "failed", "data": None}
 
-        if payment.status == PaymentStatusEnum.PENDING:
-            payment = await payment_service.check_payment_status(transaction_id)
+    async def _check():
+        async for session in get_session_async():
+            payment_service = PaymentService(session=session)
+            print(transaction_id)
+            payment = await payment_service.get_payment_by_transaction_id(transaction_id)
+            if not payment:
+                return {"message": "failed", "data": None}
+
+            if payment.status == PaymentStatusEnum.PENDING:
+                payment = await payment_service.check_payment_status(transaction_id)
 
 
-        return {"message": "success", "data": payment}
+            return {"message": "success", "data": payment}
+
+    # Run the async function in the synchronous Celery task
+    return asyncio.run(_check())
