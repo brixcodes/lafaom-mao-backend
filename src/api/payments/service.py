@@ -87,19 +87,19 @@ class PaymentService:
     async def get_payment_by_payable(self, payable_id: str, payable_type: str):
         statement = select(Payment).where(Payment.payable_id == payable_id).where(Payment.payable_type == payable_type)
         result = await self.session.execute(statement)
-        payment = result.scalars().one_or_none()
+        payment = result.scalars().first()
         return payment
     
     async def get_payment_by_transaction_id(self, transaction_id: str):
         statement = select(Payment).where(Payment.transaction_id == transaction_id)
         result = await self.session.execute(statement)
-        payment = result.scalars().one_or_none()
+        payment = result.scalars().first()
         return payment
         
     async def get_payment_by_payment_type(self, payment_type: str, payment_type_id: str):
         statement = select(Payment).where(Payment.payment_type == payment_type).where(Payment.payment_type_id == payment_type_id)
         result = await self.session.execute(statement)
-        payment = result.scalars().one_or_none()
+        payment = result.scalars().first()
         return payment
     
     async def get_currency_rates(self, from_currency: str, to_currencies: list[str] = None):
@@ -231,7 +231,7 @@ class PaymentService:
     async def get_payment_by_transaction_id(self, transaction_id: str):
         statement = select(Payment).where(Payment.payment_type_id == transaction_id)
         result = await self.session.execute(statement)
-        payment = result.scalars().one()
+        payment = result.scalars().first()
         return payment
 
     async def check_payment_status(self, payment : Payment):
