@@ -6,7 +6,7 @@ from src.api.job_offers.service import JobOfferService
 from src.api.payments.models import PaymentStatusEnum
 from src.api.payments.service import PaymentService
 from src.api.training.services.student_application import StudentApplicationService
-from src.database import get_session
+from src.database import get_session_async
 
 
 @shared_task
@@ -16,7 +16,7 @@ def check_cash_in_status(transaction_id: str) -> dict:
     """
 
     async def _check():
-        async for session in get_session():
+        async for session in get_session_async():
             payment_service = PaymentService(session=session)
 
             payment = await payment_service.get_payment_by_transaction_id(transaction_id)
