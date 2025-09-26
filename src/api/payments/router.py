@@ -121,6 +121,8 @@ async def cinetpay_webhook_handler(
         kwargs={"transaction_id": cpm_trans_id},
         countdown=0
     )
+    
+    print("Transaction ID",cpm_trans_id)
 
     # 5️⃣ Répondre avec succès (200 OK attendu par CinetPay)
     return {"ok": True}

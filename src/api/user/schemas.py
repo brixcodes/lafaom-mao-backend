@@ -28,19 +28,19 @@ class UpdateStatusInput(BaseModel):
 
 class UpdateUserInput(BaseModel):
     
-    first_name: str 
-    last_name: str 
-    password: str
-    birth_date: date | None 
-    civility : str | None 
-    country_code : str | None 
-    mobile_number : str | None 
-    fix_number: str | None 
-    email: str | None 
-    status : str
-    lang : str 
+    first_name: Optional[str] = None 
+    last_name: Optional[str] = None 
+    password: Optional[str] = None
+    birth_date: date | None  = None
+    civility : str | None = None
+    country_code : str | None = None
+    mobile_number : str | None = None
+    fix_number: str | None = None
+    email: str | None = None
+    status : Optional[str] = None
+    lang : Optional[str] = None 
     web_token : str | None 
-    two_factor_enabled : bool
+    two_factor_enabled : Optional[bool] = None
 
 
 

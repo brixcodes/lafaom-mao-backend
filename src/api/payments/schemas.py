@@ -28,8 +28,7 @@ class CinetPayInit(BaseModel):
     customer_zip_code : Optional[str] = None
 
 class PaymentInitInput(BaseModel):
-    payable_id: int
-    payable_type: str  # "JobApplication" ou "StudentApplication"
+    payable: Any 
     amount: float
     product_currency: str 
     description: str

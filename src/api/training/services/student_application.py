@@ -2,7 +2,7 @@ import sys
 from typing import List, Optional, Tuple
 from datetime import date, datetime, timezone
 from fastapi import Depends, HTTPException ,status
-from sqlalchemy import func, update ,cast ,String
+from sqlalchemy import func, update 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, or_
@@ -28,7 +28,6 @@ from src.api.user.service import UserService
 from src.api.user.models import User, UserTypeEnum
 from src.api.payments.schemas import PaymentInitInput
 from src.api.payments.service import PaymentService
-from src.api.payments.models import Payment, PaymentStatusEnum
 from src.config import settings
 from src.helper.file_helper import FileHelper
 from src.helper.moodle import MoodleService
@@ -221,7 +220,7 @@ class StudentApplicationService:
             )
         return payment
 
-    async def get_student_application_by_id(self, application_id: int) -> Optional[StudentApplication]:
+    async def get_student_application_by_id(self, application_id: int,user_id : Optional[str]=None) -> Optional[StudentApplication]:
         """Get student application by ID"""
         statement = select(StudentApplication).where(StudentApplication.id == application_id, StudentApplication.delete_at.is_(None))
         result = await self.session.execute(statement)
@@ -367,11 +366,12 @@ class StudentApplicationService:
         await self.session.refresh(participant)
 
         # Enrol on Moodle (best-effort)
-        try:
-            if sess and sess.moodle_course_id:
+        
+        if sess and sess.moodle_course_id:
                 user_service = UserService(self.session)
                 user = await user_service.get_by_id(application.user_id)
                 if user and user.email:
+                    """
                     if moodle_ensure_user_task and moodle_enrol_user_task:
                         moodle_ensure_user_task.apply_async(kwargs={
                             "email": user.email,
@@ -379,6 +379,7 @@ class StudentApplicationService:
                             "lastname": user.last_name,
                         })
                     else:
+                    
                         moodle = MoodleService()
                         moodle_user_id = user.moodle_user_id
                         if not moodle_user_id:
@@ -392,8 +393,22 @@ class StudentApplicationService:
                             await self.session.commit()
                             await self.session.refresh(user)
                         await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
-        except Exception:
-            pass
+                    """
+                    moodle = MoodleService()
+                    moodle_user_id = user.moodle_user_id
+                    if not moodle_user_id:
+                        moodle_user_id = await moodle.ensure_user(
+                            email=user.email,
+                            firstname=user.first_name,
+                            lastname=user.last_name
+                        )
+                        user.moodle_user_id = moodle_user_id
+                        self.session.add(user)
+                        await self.session.commit()
+                        await self.session.refresh(user)
+                    await moodle.enrol_user_manual(user_id=moodle_user_id, course_id=sess.moodle_course_id)
+                    
+
         return participant
 
     # Attachments

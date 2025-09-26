@@ -1,11 +1,8 @@
-import asyncio
-
 from celery import shared_task
+from sqlalchemy import select
 
-from src.api.job_offers.service import JobOfferService
-from src.api.payments.models import PaymentStatusEnum
+from src.api.payments.models import Payment, PaymentStatusEnum
 from src.api.payments.service import PaymentService
-from src.api.training.services.student_application import StudentApplicationService
 from src.database import get_session
 
 
@@ -15,19 +12,19 @@ def check_cash_in_status(transaction_id: str) -> dict:
     Celery task to check cash-in status for a payment.
     """
 
-    async def _check():
-        async for session in get_session():
-            payment_service = PaymentService(session=session)
-
-            payment = await payment_service.get_payment_by_transaction_id(transaction_id)
+    with get_session() as session:
+            payment_statement = select(Payment).where(Payment.transaction_id == transaction_id)
+            payment = session.scalars(payment_statement).first()
+            print(payment.model_dump())
+            
             if not payment:
+                print("Payment not found")
                 return {"message": "failed", "data": None}
 
-            if payment.status == PaymentStatusEnum.PENDING:
-                payment = await payment_service.check_payment_status(transaction_id)
+            if payment.status == PaymentStatusEnum.PENDING.value:
+                print("Payment is pending")
+                payment = PaymentService.check_payment_status_sync(session, payment)
 
+            return {"message": "success", "data": payment.model_dump()}
+    # ✅ Correctly wrap the async function
 
-            return {"message": "success", "data": payment}
-
-    # Run the async function in the synchronous Celery task
-    return asyncio.run(_check())

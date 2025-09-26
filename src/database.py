@@ -1,6 +1,8 @@
+from contextlib import contextmanager
 from sqlmodel import create_engine, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+
 from typing import AsyncGenerator
 from src.config import settings
 
@@ -10,7 +12,7 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
 
 
-
+@contextmanager
 def get_session():
     with Session(engine) as session:
         yield session

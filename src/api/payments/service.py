@@ -6,9 +6,10 @@ from celery import shared_task
 from fastapi import Depends
 import httpx
 from sqlalchemy import func, or_
-from sqlmodel import select
+from sqlmodel import select ,Session
+from src.api.job_offers.models import JobApplication
 from src.api.job_offers.service import JobOfferService
-from src.api.training.models import StudentApplication
+from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
 from src.config import settings
 from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
 from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInput
@@ -87,19 +88,19 @@ class PaymentService:
     async def get_payment_by_payable(self, payable_id: str, payable_type: str):
         statement = select(Payment).where(Payment.payable_id == payable_id).where(Payment.payable_type == payable_type)
         result = await self.session.execute(statement)
-        payment = result.scalars().one()
+        payment = result.scalars().first()
         return payment
     
     async def get_payment_by_transaction_id(self, transaction_id: str):
         statement = select(Payment).where(Payment.transaction_id == transaction_id)
         result = await self.session.execute(statement)
-        payment = result.scalars().one()
+        payment = result.scalars().first()
         return payment
         
     async def get_payment_by_payment_type(self, payment_type: str, payment_type_id: str):
         statement = select(Payment).where(Payment.payment_type == payment_type).where(Payment.payment_type_id == payment_type_id)
         result = await self.session.execute(statement)
-        payment = result.scalars().one()
+        payment = result.scalars().first()
         return payment
     
     async def get_currency_rates(self, from_currency: str, to_currencies: list[str] = None):
@@ -228,11 +229,7 @@ class PaymentService:
         payment = result.scalars().one()
         return payment
     
-    async def get_payment_by_transaction_id(self, transaction_id: str):
-        statement = select(Payment).where(Payment.payment_type_id == transaction_id)
-        result = await self.session.execute(statement)
-        payment = result.scalars().one()
-        return payment
+
 
     async def check_payment_status(self, payment : Payment):
         if payment.payment_type == "CinetPayPayment":
@@ -249,7 +246,7 @@ class PaymentService:
             else :
                 result = await  CinetPayService.check_cinetpay_payment_status(payment.transaction_id)
                 
-                if result["data"]["status"] == "ACCEPTED":
+                if result["data"]["status"] : #== "ACCEPTED":
                     payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
                     cinetpay_payment.amount_received = result["data"]["amount"]
@@ -276,7 +273,63 @@ class PaymentService:
 
         return payment
     
-   
+    @staticmethod
+    def check_payment_status_sync(session : Session, payment : Payment):
+        if payment.payment_type == "CinetPayPayment":
+            print("CinetPayPayment",payment.transaction_id)
+        
+            cinetpay_statement = (
+                select(CinetPayPayment).where(CinetPayPayment.transaction_id == payment.transaction_id)
+                )
+            cinetpay_payment = session.exec(cinetpay_statement).first()
+            
+            if cinetpay_payment is None:
+                print("CinetPayPayment not found")
+                
+                payment.status = PaymentStatusEnum.ERROR
+                session.commit()
+            else :
+                result =   CinetPayService.check_cinetpay_payment_status_sync(payment.transaction_id)
+                print("result",result)
+                
+                if True : #result["data"]["status"]  == "ACCEPTED":
+                    print("ACCEPTED")
+                    payment.status = PaymentStatusEnum.ACCEPTED.value
+                    cinetpay_payment.status = PaymentStatusEnum.ACCEPTED.value
+                    cinetpay_payment.amount_received = result["data"]["amount"]
+                    
+                    if payment.payable_type == "JobApplication":
+                        
+                        job_application_statement = (
+                            select(JobApplication).where(JobApplication.id == int(payment.payable_id))
+                            )
+                        job_application = session.exec(job_application_statement).first()
+                        job_application.payment_id = payment.id
+                        session.commit()
+                        session.refresh(job_application)
+                    
+                    elif payment.payable_type == "StudentApplication":
+                        statement = select(StudentApplication).where(StudentApplication.id == int(payment.payable_id))
+                        student_application = session.exec(statement).first()
+                        student_application.payment_id = payment.id
+                        session.commit()
+                        
+                    elif payment.payable_type == "TrainingFeeInstallmentPayment" :
+                        training_fee_installment_payment_statement = (
+                            select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.id == int(payment.payable_id))
+                            )
+                        training_fee_installment_payment = session.exec(training_fee_installment_payment_statement).first()
+                        training_fee_installment_payment.payment_id = payment.id
+                        session.commit()
+                    
+                elif result["data"]["status"] == "REFUSED":
+                    payment.status = PaymentStatusEnum.REFUSED.value
+                    cinetpay_payment.status = PaymentStatusEnum.REFUSED.value
+                
+                session.commit()
+
+        return payment
+    
 
 class CinetPayService:
     def __init__(self, session: AsyncSession = Depends(get_session_async)) -> None:
@@ -385,6 +438,24 @@ class CinetPayService:
         }
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment/check", json=payload)
+            response.raise_for_status()
+            return response.json()
+        
+    
+    @staticmethod
+    def check_cinetpay_payment_status_sync(transaction_id: str):
+        payload = {
+            "apikey": settings.CINETPAY_API_KEY,
+            "site_id": settings.CINETPAY_SITE_ID,
+            "transaction_id": transaction_id
+        }
+        # Using synchronous HTTP client
+        with httpx.Client() as client:
+            response = client.post(
+                "https://api-checkout.cinetpay.com/v2/payment/check",
+                json=payload,
+                timeout=30  # optional, set a timeout
+            )
             response.raise_for_status()
             return response.json()
 
