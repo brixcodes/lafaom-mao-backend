@@ -11,7 +11,7 @@ from src.helper.notifications import (ChangeAccountNotification,ForgottenPasswor
 from src.config import settings
 from src.api.user.service import UserService
 from src.api.auth.service import AuthService
-from src.api.user.schemas import  PermissionListOutSuccess, UserFullOutSuccess, UserOutSuccess
+from src.api.user.schemas import  PermissionListOutSuccess, RoleOutSuccess, UserFullOutSuccess, UserOutSuccess
 from src.helper.schemas import ErrorMessage,BaseOutFail,BaseOutSuccess
 from datetime import datetime, timezone
 import re
@@ -361,7 +361,7 @@ async def get_me(
     }
 
 
-@router.get('/my-permissions',response_model=PermissionListOutSuccess,tags=["Users"])
+@router.get('/my-permissions',response_model=PermissionListOutSuccess,tags=["Auth"])
 async def get_user_permissions(
     current_user: Annotated[User, Depends(get_current_active_user)],
     user_service: UserService = Depends()
@@ -371,6 +371,25 @@ async def get_user_permissions(
     
     return  { "message" : "My Permissions", "data" : user_permissions }
 
+
+@router.get('/my-role',response_model=RoleOutSuccess,tags=["Auth"])
+async def get_user_permissions(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    user_service: UserService = Depends()
+):
+    
+    user_role = await user_service.get_user_role(user_id=current_user.id)
+    
+    if len(user_role) == 0  :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                    message=ErrorMessage.ROLE_NOT_FOUND.description,
+                    error_code= ErrorMessage.ROLE_NOT_FOUND.value
+                ).model_dump()
+        )
+    
+    return  { "message" : "My Role", "data" : user_role[0] }
 
 @router.post("/update-profile",response_model=UserFullOutSuccess)
 async def update_profile(

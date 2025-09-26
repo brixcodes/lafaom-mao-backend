@@ -200,5 +200,8 @@ class ErrorMessage(Enum):
     
     TRAINING_FEE_INSTALLMENT_AMOUNT_TOO_SMALL = ('training_fee_installment_amount_too_small',"Training fee installment amount too small")
     
+    NO_ROLE_FOUND = ('no_role_found',"No role found")
+    
+    ROLE_NOT_FOUND = ('role_not_found',"Role not found")
     def __str__(self):
         return self.value

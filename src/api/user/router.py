@@ -9,7 +9,7 @@ from src.api.user.dependencies import get_user
 from src.api.user.models import PermissionEnum, RoleEnum, User
 from src.helper.schemas import BaseOutFail, ErrorMessage
 from src.api.user.service import UserService
-from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, PermissionSmallListOutSuccess, RoleListOutSuccess, UpdateStatusInput, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
+from src.api.user.schemas import ( AssignPermissionsInput, AssignRoleInput, CreateUserInput, PermissionListOutSuccess, PermissionSmallListOutSuccess, RoleListOutSuccess, RoleOutSuccess, UpdateStatusInput, UpdateUserInput, UserFilter, UserListInput, UserListOutSuccess, UserOutSuccess, UsersPageOutSuccess)
 
 router = APIRouter()
 
@@ -77,6 +77,27 @@ async def get_user_permissions(
     user_permissions = await user_service.get_all_user_permissions(user_id=user_id)
     
     return  { "message" : "User Permissions", "data" : user_permissions }
+
+
+@router.get('/users/role/{user_id}',response_model=RoleOutSuccess,tags=["Role And Permission"])
+async def get_user_permissions(
+    user_id : str,
+    current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
+    user_service: UserService = Depends()
+):
+    
+    user_role = await user_service.get_user_role(user_id=user_id)
+    
+    if len(user_role) == 0  :
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BaseOutFail(
+                    message=ErrorMessage.ROLE_NOT_FOUND.description,
+                    error_code= ErrorMessage.ROLE_NOT_FOUND.value
+                ).model_dump()
+        )
+    
+    return  { "message" : "User Permissions", "data" : user_role[0] }
 
 @router.get("/users", response_model=UsersPageOutSuccess,tags=["Users"])
 async def read_user_list( 
