@@ -30,6 +30,7 @@ class UpdateUserInput(BaseModel):
     
     first_name: Optional[str] = None 
     last_name: Optional[str] = None 
+    user_type: Optional[str] = None
     password: Optional[str] = None
     birth_date: date | None  = None
     civility : str | None = None
