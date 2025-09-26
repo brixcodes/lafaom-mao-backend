@@ -395,17 +395,29 @@ class UserService:
         await self.session.refresh(user_role)
         return {"user_id": user_id, "role_id": role_id}
     
-    async def revoke_role(self, user_id: str, role_id: int):
+    async def revoke_role(self, user_id: str, role_id: int) -> dict:
+        """
+        Supprime le rôle d'un utilisateur s'il existe.
+        Retourne le user_id et role_id dans tous les cas.
+        """
 
-        statement = select(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id == role_id )
+        # Cherche le UserRole correspondant
+        statement = select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role_id == role_id
+        )
         result = await self.session.execute(statement)
         user_role = result.scalars().one_or_none()
-        if user_role is None:    
-            return {"user_id": user_id, "role_id": role_id}
 
-        self.session.delete(user_role)
+        # Si le rôle n'existe pas, on retourne quand même les ids
+        if not user_role:
+            return {"user_id": user_id, "role_id": role_id, "revoked": False}
+
+        # Supprime le rôle et commit
+        await self.session.delete(user_role)
         await self.session.commit()
-        return  {"user_id": user_id, "role_id": role_id}
+
+        return {"user_id": user_id, "role_id": role_id, "revoked": True}
     
     async def assign_permissions(self, user_id: str, permissions: list[str]):
         for permission in permissions:
