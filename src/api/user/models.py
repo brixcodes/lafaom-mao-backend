@@ -118,6 +118,7 @@ class NotificationChannel(str, Enum):
 class AddressTypeEnum(str, Enum):
     PRIMARY = "primary"
     BILLING = "billing"
+    
 class PermissionUserTypeEnum(str, Enum):
     USER = "user"
     ROLE = "role"

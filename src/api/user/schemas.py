@@ -1,7 +1,7 @@
 from pydantic import BaseModel,Field
 from typing import List,Optional,Literal
 from datetime import date, datetime
-from src.api.user.models import UserStatusEnum, UserTypeEnum
+from src.api.user.models import CivilityEnum, UserStatusEnum, UserTypeEnum
 from src.helper.schemas import BaseOutPage, BaseOutSuccess
 
 
@@ -11,16 +11,16 @@ class CreateUserInput(BaseModel):
     first_name: str 
     last_name: str 
     password: str
-    birth_date: date | None 
-    civility : str | None 
-    country_code : str | None 
-    mobile_number : str | None 
-    fix_number: str | None 
+    birth_date: date | None = None
+    civility : CivilityEnum | None = None
+    country_code : str | None = "SN"
+    mobile_number : str | None = None
+    fix_number: str | None = None
     email: str | None 
-    status : str
-    lang : str 
+    status : UserStatusEnum
+    lang : Literal["en","fr"] = "en" 
     web_token : str | None 
-    user_type : str 
+    user_type : UserTypeEnum 
     two_factor_enabled : bool 
     
 class UpdateStatusInput(BaseModel):
