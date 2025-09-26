@@ -236,6 +236,8 @@ class UserService:
 
         user.first_name = input.first_name
         user.last_name = input.last_name
+        user.user_type = input.user_type
+        user.status = input.status
         user.country_code = input.country_code
         user.birth_date = input.birth_date
         user.civility = input.civility

@@ -87,6 +87,8 @@ class UpdateUserProfile(BaseModel) :
 
     first_name: str 
     last_name: str 
+    user_type: str
+    status: str
     birth_date: date 
     civility : str 
     country_code : str ="SN"
