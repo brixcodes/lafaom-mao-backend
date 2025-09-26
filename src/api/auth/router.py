@@ -373,7 +373,7 @@ async def get_user_permissions(
 
 
 @router.get('/my-role',response_model=RoleOutSuccess,tags=["Auth"])
-async def get_user_permissions(
+async def get_user_role(
     current_user: Annotated[User, Depends(get_current_active_user)],
     user_service: UserService = Depends()
 ):

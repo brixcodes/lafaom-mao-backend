@@ -80,7 +80,7 @@ async def get_user_permissions(
 
 
 @router.get('/users/role/{user_id}',response_model=RoleOutSuccess,tags=["Role And Permission"])
-async def get_user_permissions(
+async def get_user_role(
     user_id : str,
     current_user : Annotated[User, Depends(check_permissions([PermissionEnum.CAN_GIVE_PERMISSION]))],
     user_service: UserService = Depends()
