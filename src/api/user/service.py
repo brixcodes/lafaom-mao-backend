@@ -181,10 +181,14 @@ class UserService:
         statement = select(User).where(User.id == user_id)
         result = await self.session.execute(statement)
         user = result.scalars().one()
+        
+        if user_update_input.password is not None and user_update_input.password != "":
+                user_update_input.password = pwd_context.hash(value)
+            
         for key, value in user_update_input.model_dump(exclude=None).items():
-            if key == "password":
-                user.password = pwd_context.hash(value)
-                
+            
+            if value is None:
+                continue
             setattr(user, key, value)
         self.session.add(user)
         await self.session.commit()
@@ -370,7 +374,15 @@ class UserService:
 
 
     async def assign_role(self, user_id: str, role_id: str):
-
+        
+        statement = select(UserRole).where(UserRole.user_id == user_id)
+        result = await self.session.execute(statement)
+        user_roles = result.scalars().all()
+        for user_role in user_roles:
+            self.session.delete(user_role)
+            
+        await self.session.commit()
+        
         statement = select(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id == role_id )
         result = await self.session.execute(statement)
         user_role = result.scalars().one_or_none()
