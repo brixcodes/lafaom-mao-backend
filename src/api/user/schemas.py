@@ -1,7 +1,7 @@
 from pydantic import BaseModel,Field
 from typing import List,Optional,Literal
 from datetime import date, datetime
-from src.api.user.models import UserTypeEnum
+from src.api.user.models import UserStatusEnum, UserTypeEnum
 from src.helper.schemas import BaseOutPage, BaseOutSuccess
 
 
@@ -24,7 +24,7 @@ class CreateUserInput(BaseModel):
     two_factor_enabled : bool 
     
 class UpdateStatusInput(BaseModel):
-    status : UserTypeEnum
+    status : UserStatusEnum
 
 class UpdateUserInput(BaseModel):
     
