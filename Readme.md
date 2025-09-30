@@ -71,7 +71,7 @@ And run the application using the following command:
 uvicorn src.main:app --reload
 ```
 
-Now open your browser and navigate to `http://localhost:8000/docs` to see the API documentation.
+Now open your browser and navigate to `https://lafaom.vertex-cam.com/api/v1/docs` to see the API documentation.
 
 ## Different environments anc configuration settings
 
@@ -547,7 +547,7 @@ async def read_users(user_service : UserService = Depends()):
 
 Notice that we are using the `Depends` function to inject the `UserService` object into the `read_users` function.
 
-Now you can run the application and navigate to `http://localhost:8000/users` to see the users.
+Now you can run the application and navigate to `https://lafaom.vertex-cam.com/api/v1/users` to see the users.
 
 ## Create a user.
 
@@ -600,7 +600,7 @@ Now if you go to the terminal and send the following post request
 
 ```
 curl -X 'POST' \
-  'http://localhost:8000/users/' \
+  'https://lafaom.vertex-cam.com/api/v1/users/' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
