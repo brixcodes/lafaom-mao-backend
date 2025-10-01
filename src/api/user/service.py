@@ -182,14 +182,17 @@ class UserService:
         result = await self.session.execute(statement)
         user = result.scalars().one()
         
-        if user_update_input.password is not None and user_update_input.password != "":
-                user_update_input.password = pwd_context.hash(value)
-            
-        for key, value in user_update_input.model_dump(exclude=None).items():
-            
-            if value is None:
-                continue
-            setattr(user, key, value)
+        # Traitement spécial pour le mot de passe - ne le hasher que s'il a été fourni
+        update_data = user_update_input.model_dump(exclude_none=True)
+        
+        for key, value in update_data.items():
+            if key == "password" and value is not None and value != "":
+                # Hasher le mot de passe seulement s'il a été fourni
+                setattr(user, key, pwd_context.hash(value))
+            elif key != "password":
+                # Pour tous les autres champs, les assigner directement
+                setattr(user, key, value)
+                
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
