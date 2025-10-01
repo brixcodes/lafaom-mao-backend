@@ -27,7 +27,8 @@ from src.api.training.schemas import (
 from src.api.user.service import UserService
 from src.api.user.models import User, UserTypeEnum
 from src.api.payments.schemas import PaymentInitInput
-from src.api.payments.service import PaymentService
+# Importation différée pour éviter l'importation circulaire
+# from src.api.payments.service import PaymentService
 from src.config import settings
 from src.helper.file_helper import FileHelper
 from src.helper.moodle import MoodleService
@@ -199,6 +200,8 @@ class StudentApplicationService:
 
         fullname = f"{training.title} – {start_str} {cohort}"
         
+        # Importation différée pour éviter l'importation circulaire
+        from src.api.payments.service import PaymentService
         payment_service = PaymentService(self.session)
         payment_input = PaymentInitInput(
             payable=application,
@@ -602,6 +605,8 @@ class StudentApplicationService:
 
         fullname = f"{training.title} – {start_str} {cohort}"
         
+        # Importation différée pour éviter l'importation circulaire
+        from src.api.payments.service import PaymentService
         payment_service = PaymentService(self.session)
         payment_input = PaymentInitInput(
             payable=new_payment,

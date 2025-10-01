@@ -9,7 +9,8 @@ from sqlalchemy import func, or_
 from sqlmodel import select ,Session
 from src.api.job_offers.models import JobApplication
 from src.api.job_offers.service import JobOfferService
-from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
+# Importation différée pour éviter l'importation circulaire
+# from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
 from src.config import settings
 from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
 from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInput
@@ -256,6 +257,8 @@ class PaymentService:
                         job_offer = await job_application_service.update_job_application_payment(payment_id=int(payment.id),application_id=payment.payable_id)
                     
                     elif payment.payable_type == "StudentApplication":
+                        # Importation différée pour éviter l'importation circulaire
+                        from src.api.training.models import StudentApplication
                         statement = select(StudentApplication).where(StudentApplication.id == payment.payable_id)
                         result = await self.session.execute(statement)
                         student_application = result.scalars().one()
@@ -309,12 +312,16 @@ class PaymentService:
                         session.refresh(job_application)
                     
                     elif payment.payable_type == "StudentApplication":
+                        # Importation différée pour éviter l'importation circulaire
+                        from src.api.training.models import StudentApplication
                         statement = select(StudentApplication).where(StudentApplication.id == int(payment.payable_id))
                         student_application = session.exec(statement).first()
                         student_application.payment_id = payment.id
                         session.commit()
                         
                     elif payment.payable_type == "TrainingFeeInstallmentPayment" :
+                        # Importation différée pour éviter l'importation circulaire
+                        from src.api.training.models import TrainingFeeInstallmentPayment
                         training_fee_installment_payment_statement = (
                             select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.id == int(payment.payable_id))
                             )
