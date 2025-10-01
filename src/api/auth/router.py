@@ -38,7 +38,7 @@ async def login_for_access_token( request: Request,
     
     if user.two_factor_enabled:
         code = generate_random_code()
-        token_service.save_two_factor_code(user_id=user.id, email=form_data.email, code=code)
+        token_service.save_two_factor_code(code=code, user_id=user.id, email=form_data.email)
         TwoFactorAuthNotification(
             email=user.email,
             code=code,
