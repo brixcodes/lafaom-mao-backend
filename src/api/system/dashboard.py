@@ -18,103 +18,56 @@ async def get_users_statistics(
     total_users_result = await db.execute(select(func.count(User.id)))
     total_users = total_users_result.scalar() or 0
     
-    # Utilisateurs actifs vs inactifs
+    # Utilisateurs actifs
     active_users_result = await db.execute(
-        select(func.count(User.id)).where(User.status == "ACTIVE")
+        select(func.count(User.id)).where(User.status == "active")
     )
     active_users = active_users_result.scalar() or 0
     
+    # Utilisateurs inactifs
     inactive_users_result = await db.execute(
-        select(func.count(User.id)).where(User.status == "INACTIVE")
+        select(func.count(User.id)).where(User.status == "inactive")
     )
     inactive_users = inactive_users_result.scalar() or 0
     
-    pending_users_result = await db.execute(
-        select(func.count(User.id)).where(User.status == "PENDING")
+    # Utilisateurs bloqués
+    blocked_users_result = await db.execute(
+        select(func.count(User.id)).where(User.status == "blocked")
     )
-    pending_users = pending_users_result.scalar() or 0
+    blocked_users = blocked_users_result.scalar() or 0
     
-    # Utilisateurs avec connexion récente (30 derniers jours)
-    thirty_days_ago = datetime.now() - timedelta(days=30)
-    recent_login_users_result = await db.execute(
-        select(func.count(User.id)).where(
-            and_(
-                User.last_login.isnot(None),
-                User.last_login >= thirty_days_ago
-            )
-        )
+    # Utilisateurs supprimés
+    deleted_users_result = await db.execute(
+        select(func.count(User.id)).where(User.status == "deleted")
     )
-    recent_login_users = recent_login_users_result.scalar() or 0
+    deleted_users = deleted_users_result.scalar() or 0
     
-    # Utilisateurs créés ce mois
-    start_of_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    new_users_this_month_result = await db.execute(
-        select(func.count(User.id)).where(User.created_at >= start_of_month)
+    # Statistiques par type d'utilisateur
+    user_types_result = await db.execute(
+        select(User.user_type, func.count(User.id))
+        .group_by(User.user_type)
     )
-    new_users_this_month = new_users_this_month_result.scalar() or 0
+    user_types = user_types_result.all()
     
-    # Statistiques par rôles
-    roles_stats = []
-    all_roles_result = await db.execute(select(Role))
-    all_roles = all_roles_result.scalars().all()
+    user_types_stats = {}
+    for user_type, count in user_types:
+        user_types_stats[user_type] = count
     
-    for role in all_roles:
-        # Nombre d'utilisateurs par rôle
-        users_count_result = await db.execute(
-            select(func.count(User.id))
-            .join(UserRole, User.id == UserRole.user_id)
-            .where(UserRole.role_id == role.id)
-        )
-        users_count = users_count_result.scalar() or 0
-        
-        # Utilisateurs actifs par rôle
-        active_count_result = await db.execute(
-            select(func.count(User.id))
-            .join(UserRole, User.id == UserRole.user_id)
-            .where(
-                and_(
-                    UserRole.role_id == role.id,
-                    User.status == "ACTIVE"
-                )
-            )
-        )
-        active_count = active_count_result.scalar() or 0
-        
-        # Utilisateurs avec connexion récente par rôle
-        recent_login_count_result = await db.execute(
-            select(func.count(User.id))
-            .join(UserRole, User.id == UserRole.user_id)
-            .where(
-                and_(
-                    UserRole.role_id == role.id,
-                    User.last_login.isnot(None),
-                    User.last_login >= thirty_days_ago
-                )
-            )
-        )
-        recent_login_count = recent_login_count_result.scalar() or 0
-        
-        roles_stats.append({
-            "role_id": role.id,
-            "role_name": role.name,
-            "role_description": role.description,
-            "total_users": users_count,
-            "active_users": active_count,
-            "recent_login_users": recent_login_count,
-            "inactive_users": users_count - active_count
-        })
+    # Statistiques par rôle
+    roles_stats = {}
+    roles_result = await db.execute(
+        select(Role.name, func.count(UserRole.user_id))
+        .join(UserRole, Role.id == UserRole.role_id)
+        .group_by(Role.name)
+    )
+    roles_data = roles_result.all()
     
-    # Statistiques par statut
-    status_stats = {
-        "ACTIVE": active_users,
-        "INACTIVE": inactive_users,
-        "PENDING": pending_users
-    }
+    for role_name, count in roles_data:
+        roles_stats[role_name] = count
     
-    # Répartition géographique (si les utilisateurs ont des adresses)
+    # Statistiques géographiques (par pays uniquement)
     geographic_stats = {
-        "by_country": {},
-        "by_city": {}
+        "by_country": {}
     }
     
     # Utilisateurs par pays
@@ -128,9 +81,6 @@ async def get_users_statistics(
     for country_code, count in users_by_country:
         geographic_stats["by_country"][country_code] = count
     
-    # Note: Les statistiques par ville nécessiteraient une jointure avec la table Address
-    # Pour l'instant, nous nous concentrons sur les statistiques par pays
-    
     # Statistiques temporelles
     new_this_week_result = await db.execute(
         select(func.count(User.id)).where(
@@ -139,60 +89,63 @@ async def get_users_statistics(
     )
     new_this_week = new_this_week_result.scalar() or 0
     
-    new_today_result = await db.execute(
+    new_this_month_result = await db.execute(
         select(func.count(User.id)).where(
-            User.created_at >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            User.created_at >= datetime.now() - timedelta(days=30)
         )
     )
-    new_today = new_today_result.scalar() or 0
+    new_this_month = new_this_month_result.scalar() or 0
     
-    temporal_stats = {
-        "new_this_month": new_users_this_month,
-        "new_this_week": new_this_week,
-        "new_today": new_today
-    }
-    
-    # Utilisateurs avec 2FA activé
-    two_fa_enabled_result = await db.execute(
+    # Statistiques de sécurité
+    two_factor_enabled_result = await db.execute(
         select(func.count(User.id)).where(User.two_factor_enabled == True)
     )
-    two_fa_enabled = two_fa_enabled_result.scalar() or 0
+    two_factor_enabled = two_factor_enabled_result.scalar() or 0
     
-    # Utilisateurs avec email vérifié
-    email_verified_result = await db.execute(
-        select(func.count(User.id)).where(User.email_verified == True)
+    # Utilisateurs avec email (pas de champ email_verified dans le modèle)
+    users_with_email_result = await db.execute(
+        select(func.count(User.id)).where(User.email.isnot(None))
     )
-    email_verified = email_verified_result.scalar() or 0
+    users_with_email = users_with_email_result.scalar() or 0
     
-    # Taux de conversion (utilisateurs actifs / total)
-    conversion_rate = 0
-    if total_users > 0:
-        conversion_rate = round((active_users / total_users) * 100, 2)
+    # Utilisateurs avec dernière connexion récente
+    recent_login_result = await db.execute(
+        select(func.count(User.id)).where(
+            User.last_login >= datetime.now() - timedelta(days=7)
+        )
+    )
+    recent_login = recent_login_result.scalar() or 0
     
-    # Taux d'engagement (connexions récentes / total)
-    engagement_rate = 0
-    if total_users > 0:
-        engagement_rate = round((recent_login_users / total_users) * 100, 2)
+    # Utilisateurs sans connexion récente
+    no_recent_login_result = await db.execute(
+        select(func.count(User.id)).where(
+            and_(
+                User.last_login.isnot(None),
+                User.last_login < datetime.now() - timedelta(days=30)
+            )
+        )
+    )
+    no_recent_login = no_recent_login_result.scalar() or 0
     
     return {
-        "overview": {
+        "summary": {
             "total_users": total_users,
             "active_users": active_users,
             "inactive_users": inactive_users,
-            "pending_users": pending_users,
-            "recent_login_users": recent_login_users,
-            "conversion_rate": conversion_rate,
-            "engagement_rate": engagement_rate
+            "blocked_users": blocked_users,
+            "deleted_users": deleted_users
         },
-        "by_status": status_stats,
-        "by_roles": roles_stats,
+        "user_types": user_types_stats,
+        "roles": roles_stats,
         "geographic": geographic_stats,
-        "temporal": temporal_stats,
-        "security": {
-            "two_fa_enabled": two_fa_enabled,
-            "email_verified": email_verified,
-            "two_fa_rate": round((two_fa_enabled / total_users) * 100, 2) if total_users > 0 else 0,
-            "email_verification_rate": round((email_verified / total_users) * 100, 2) if total_users > 0 else 0
+        "temporal": {
+            "new_this_week": new_this_week,
+            "new_this_month": new_this_month
         },
-        "generated_at": datetime.now().isoformat()
+        "security": {
+            "two_factor_enabled": two_factor_enabled,
+            "users_with_email": users_with_email,
+            "recent_login": recent_login,
+            "no_recent_login": no_recent_login
+        }
     }
