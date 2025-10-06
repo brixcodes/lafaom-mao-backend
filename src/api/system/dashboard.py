@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
+from src.api.auth.utils import get_current_user
 from sqlmodel import select, func, and_
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session_async
 from src.api.user.models import User, Role, UserRole
-from src.api.auth.dependencies import get_current_user
 
 router = APIRouter()
 
