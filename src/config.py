@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     CINETPAY_NOTIFY_URL: str | None = None
     CINETPAY_RETURN_URL: str | None = None
     
+    ## CinetPay Visa Configuration
+    CINETPAY_ENABLE_VISA: bool = True
+    CINETPAY_VISA_SECURED: bool = True
+    
     CURRENCY_API_KEY : str | None = None
     CURRENCY_API_URL: str | None = None
     

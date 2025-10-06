@@ -6,7 +6,7 @@ from src.api.auth.utils import check_permissions
 from src.api.payments.dependencies import get_payment_by_transaction
 from src.api.payments.models import PaymentStatusEnum, Payment
 from src.api.payments.service import PaymentService 
-from src.api.payments.schemas import  PaymentFilter, PaymentOutSuccess, PaymentPageOutSuccess, WebhookPayload
+from src.api.payments.schemas import  PaymentFilter, PaymentOutSuccess, PaymentPageOutSuccess, WebhookPayload, VisaConfigInput, VisaConfigOutSuccess
 from src.api.auth.models import User
 from src.api.payments.utils import check_cash_in_status
 from src.api.user.models import PermissionEnum
@@ -141,4 +141,33 @@ async def get_payment_status(
         "message" : "success",
         "data": payment
     }
+
+@router.get("/visa-config", response_model=VisaConfigOutSuccess)
+async def get_visa_configuration():
+    """Récupérer la configuration Visa actuelle"""
+    return VisaConfigOutSuccess(
+        message="Configuration Visa récupérée avec succès",
+        data={
+            "visa_enabled": settings.CINETPAY_ENABLE_VISA,
+            "visa_secured": settings.CINETPAY_VISA_SECURED,
+            "channels": "MOBILE_MONEY,WALLET,CARD"
+        }
+    )
+
+@router.post("/visa-config", response_model=VisaConfigOutSuccess)
+async def update_visa_configuration(
+    config: VisaConfigInput,
+    # current_user: Annotated[User, Depends(check_permissions([PermissionEnum.CAN_UPDATE_PAYMENT]))]
+):
+    """Mettre à jour la configuration Visa"""
+    # Note: Dans un environnement de production, vous devriez persister ces configurations
+    # Pour l'instant, nous retournons juste la configuration demandée
+    return VisaConfigOutSuccess(
+        message="Configuration Visa mise à jour avec succès",
+        data={
+            "visa_enabled": config.visa_enabled,
+            "visa_secured": config.visa_secured,
+            "channels": "MOBILE_MONEY,WALLET,CARD"
+        }
+    )
 

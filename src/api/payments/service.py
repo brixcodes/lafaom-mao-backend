@@ -352,11 +352,14 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "ALL",
+            "channels": "MOBILE_MONEY,WALLET,CARD",
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
-            "meta":payment_data.meta,
+            "meta": payment_data.meta,
             "invoice_data": payment_data.invoice_data,
+            # Configuration spécifique pour activer Visa
+            "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
+            "is_visa_secured": settings.CINETPAY_VISA_SECURED,
         }
         
         if payment_data.customer_name:

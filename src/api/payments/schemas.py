@@ -112,3 +112,17 @@ class PaymentOutSuccess(BaseOutSuccess):
     
 class PaymentPageOutSuccess(BaseOutPage):
     data : list[PaymentOut]
+
+class VisaConfigInput(BaseModel):
+    """Schéma pour la configuration Visa"""
+    visa_enabled: bool = True
+    visa_secured: bool = True
+
+class VisaConfigOut(BaseModel):
+    """Schéma de sortie pour la configuration Visa"""
+    visa_enabled: bool
+    visa_secured: bool
+    channels: str
+
+class VisaConfigOutSuccess(BaseOutSuccess):
+    data: VisaConfigOut
