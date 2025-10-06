@@ -345,13 +345,6 @@ class CinetPayService:
 
     async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
 
-        # Debug: Afficher les valeurs des paramètres Visa
-        print(f"DEBUG Visa Config - ENABLE_VISA: {settings.CINETPAY_ENABLE_VISA}")
-        print(f"DEBUG Visa Config - VISA_SECURED: {settings.CINETPAY_VISA_SECURED}")
-        print(f"DEBUG Visa Config - CHANNELS: {settings.CINETPAY_CHANNELS}")
-        print(f"DEBUG Visa Config - API_KEY: {settings.CINETPAY_API_KEY}")
-        print(f"DEBUG Visa Config - SITE_ID: {settings.CINETPAY_SITE_ID}")
-        print(f"DEBUG Visa Config - CURRENCY: {settings.CINETPAY_CURRENCY}")
         
         payload = {
             "amount": payment_data.amount,
@@ -368,6 +361,9 @@ class CinetPayService:
             # Configuration spécifique pour activer Visa
             "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
             "is_visa_secured": settings.CINETPAY_VISA_SECURED,
+            # Paramètres supplémentaires pour forcer l'affichage des cartes
+            "payment_method": "CREDIT_CARD",
+            "gateway_progress": "BEGIN_PAYMENT",
             # Champs requis pour CinetPay
             "lang": "fr",
             "cpm_version": "V4",
@@ -384,15 +380,17 @@ class CinetPayService:
         payload["customer_state"] = payment_data.customer_state or "Littoral"
         payload["customer_zip_code"] = payment_data.customer_zip_code or "065100"
         
-        # Debug: Afficher le payload final
-        print(f"DEBUG Final Payload: {payload}")
+        # Debug: Afficher le payload pour vérifier les paramètres Visa
+        print(f"DEBUG CinetPay Payload - Channels: {payload.get('channels')}")
+        print(f"DEBUG CinetPay Payload - Visa API: {payload.get('can_pay_with_visa_api')}")
+        print(f"DEBUG CinetPay Payload - Visa Secured: {payload.get('is_visa_secured')}")
+        print(f"DEBUG CinetPay Payload - Payment Method: {payload.get('payment_method')}")
         
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
             
             print(f"DEBUG CinetPay Response - Status: {response.status_code}")
             print(f"DEBUG CinetPay Response - Body: {response.json()}")
-            print(f"DEBUG CinetPay Response - Payload sent: {payload}")
             if response.status_code == 400:
                 data = response.json()
                 return {
