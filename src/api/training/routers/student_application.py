@@ -229,7 +229,7 @@ async def delete_student_attachment(
 @router.post("/my-student-applications/{application_id}/submit", response_model=InitPaymentOutSuccess, tags=["My Student Application"])
 async def submit_student_application(
     application_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    # current_user: Annotated[User, Depends(get_current_active_user)],
     student_app_service: StudentApplicationService = Depends(),
 ):
     application = await student_app_service.get_student_application_by_id(application_id)
