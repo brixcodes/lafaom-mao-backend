@@ -150,7 +150,7 @@ async def get_visa_configuration():
         data={
             "visa_enabled": settings.CINETPAY_ENABLE_VISA,
             "visa_secured": settings.CINETPAY_VISA_SECURED,
-            "channels": "MOBILE_MONEY,WALLET,CARD"
+            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD"
         }
     )
 
@@ -167,7 +167,7 @@ async def update_visa_configuration(
         data={
             "visa_enabled": config.visa_enabled,
             "visa_secured": config.visa_secured,
-            "channels": "MOBILE_MONEY,WALLET,CARD"
+            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD"
         }
     )
 

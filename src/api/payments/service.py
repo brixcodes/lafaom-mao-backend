@@ -352,7 +352,7 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "MOBILE_MONEY,WALLET,CARD",
+            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD",
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
             "meta": payment_data.meta,
@@ -360,28 +360,21 @@ class CinetPayService:
             # Configuration spécifique pour activer Visa
             "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
             "is_visa_secured": settings.CINETPAY_VISA_SECURED,
+            # Champs requis pour CinetPay
+            "lang": "fr",
+            "cpm_version": "V4",
         }
         
-        if payment_data.customer_name:
-            payload["customer_name"] = payment_data.customer_name
-        if payment_data.customer_surname:
-            payload["customer_surname"] = payment_data.customer_surname
-        if payment_data.customer_email:
-            payload["customer_email"] = payment_data.customer_email
-        if payment_data.customer_phone_number:
-            payload["customer_phone_number"] = payment_data.customer_phone_number
-        if payment_data.customer_address:
-            payload["customer_address"] = payment_data.customer_address
-        if payment_data.customer_city:
-            payload["customer_city"] = payment_data.customer_city
-        if payment_data.customer_country:
-            payload["customer_country"] = payment_data.customer_country
-        if payment_data.customer_state:
-            payload["customer_state"] = payment_data.customer_state
-        if payment_data.customer_zip_code:
-            payload["customer_zip_code"] = payment_data.customer_zip_code
-            
-        payload["customer_zip_code"] = "065100"
+        # Informations client obligatoires pour CinetPay
+        payload["customer_name"] = payment_data.customer_name or "Client"
+        payload["customer_surname"] = payment_data.customer_surname or "LAFAOM"
+        payload["customer_email"] = payment_data.customer_email or "client@lafaom.com"
+        payload["customer_phone_number"] = payment_data.customer_phone_number or "237000000000"
+        payload["customer_address"] = payment_data.customer_address or "Douala, Cameroun"
+        payload["customer_city"] = payment_data.customer_city or "Douala"
+        payload["customer_country"] = payment_data.customer_country or "CM"
+        payload["customer_state"] = payment_data.customer_state or "Littoral"
+        payload["customer_zip_code"] = payment_data.customer_zip_code or "065100"
         
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
