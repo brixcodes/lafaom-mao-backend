@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
-from sqlmodel import Session, select, func, and_
+from sqlmodel import select, func, and_
 from datetime import datetime, timedelta
 from typing import Dict, Any
-from src.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.database import get_session_async
 from src.api.user.models import User, Role, UserRole
 from src.api.auth.dependencies import get_current_user
 
@@ -10,58 +11,66 @@ router = APIRouter()
 
 @router.get("/users-stats")
 async def get_users_statistics(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session_async),
     current_user: User = Depends(get_current_user)
 ):
     """Récupérer les statistiques détaillées des utilisateurs par rôles et statuts"""
     
     # Statistiques générales
-    total_users = db.exec(select(func.count(User.id))).first() or 0
+    total_users_result = await db.execute(select(func.count(User.id)))
+    total_users = total_users_result.scalar() or 0
     
     # Utilisateurs actifs vs inactifs
-    active_users = db.exec(
+    active_users_result = await db.execute(
         select(func.count(User.id)).where(User.status == "ACTIVE")
-    ).first() or 0
+    )
+    active_users = active_users_result.scalar() or 0
     
-    inactive_users = db.exec(
+    inactive_users_result = await db.execute(
         select(func.count(User.id)).where(User.status == "INACTIVE")
-    ).first() or 0
+    )
+    inactive_users = inactive_users_result.scalar() or 0
     
-    pending_users = db.exec(
+    pending_users_result = await db.execute(
         select(func.count(User.id)).where(User.status == "PENDING")
-    ).first() or 0
+    )
+    pending_users = pending_users_result.scalar() or 0
     
     # Utilisateurs avec connexion récente (30 derniers jours)
     thirty_days_ago = datetime.now() - timedelta(days=30)
-    recent_login_users = db.exec(
+    recent_login_users_result = await db.execute(
         select(func.count(User.id)).where(
             and_(
                 User.last_login.isnot(None),
                 User.last_login >= thirty_days_ago
             )
         )
-    ).first() or 0
+    )
+    recent_login_users = recent_login_users_result.scalar() or 0
     
     # Utilisateurs créés ce mois
     start_of_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    new_users_this_month = db.exec(
+    new_users_this_month_result = await db.execute(
         select(func.count(User.id)).where(User.created_at >= start_of_month)
-    ).first() or 0
+    )
+    new_users_this_month = new_users_this_month_result.scalar() or 0
     
     # Statistiques par rôles
     roles_stats = []
-    all_roles = db.exec(select(Role)).all()
+    all_roles_result = await db.execute(select(Role))
+    all_roles = all_roles_result.scalars().all()
     
     for role in all_roles:
         # Nombre d'utilisateurs par rôle
-        users_count = db.exec(
+        users_count_result = await db.execute(
             select(func.count(User.id))
             .join(UserRole, User.id == UserRole.user_id)
             .where(UserRole.role_id == role.id)
-        ).first() or 0
+        )
+        users_count = users_count_result.scalar() or 0
         
         # Utilisateurs actifs par rôle
-        active_count = db.exec(
+        active_count_result = await db.execute(
             select(func.count(User.id))
             .join(UserRole, User.id == UserRole.user_id)
             .where(
@@ -70,10 +79,11 @@ async def get_users_statistics(
                     User.status == "ACTIVE"
                 )
             )
-        ).first() or 0
+        )
+        active_count = active_count_result.scalar() or 0
         
         # Utilisateurs avec connexion récente par rôle
-        recent_login_count = db.exec(
+        recent_login_count_result = await db.execute(
             select(func.count(User.id))
             .join(UserRole, User.id == UserRole.user_id)
             .where(
@@ -83,7 +93,8 @@ async def get_users_statistics(
                     User.last_login >= thirty_days_ago
                 )
             )
-        ).first() or 0
+        )
+        recent_login_count = recent_login_count_result.scalar() or 0
         
         roles_stats.append({
             "role_id": role.id,
@@ -109,49 +120,59 @@ async def get_users_statistics(
     }
     
     # Utilisateurs par pays
-    users_by_country = db.exec(
+    users_by_country_result = await db.execute(
         select(User.country_code, func.count(User.id))
         .where(User.country_code.isnot(None))
         .group_by(User.country_code)
-    ).all()
+    )
+    users_by_country = users_by_country_result.all()
     
     for country_code, count in users_by_country:
         geographic_stats["by_country"][country_code] = count
     
     # Utilisateurs par ville
-    users_by_city = db.exec(
+    users_by_city_result = await db.execute(
         select(User.city, func.count(User.id))
         .where(User.city.isnot(None))
         .group_by(User.city)
-    ).all()
+    )
+    users_by_city = users_by_city_result.all()
     
     for city, count in users_by_city:
         geographic_stats["by_city"][city] = count
     
     # Statistiques temporelles
+    new_this_week_result = await db.execute(
+        select(func.count(User.id)).where(
+            User.created_at >= datetime.now() - timedelta(days=7)
+        )
+    )
+    new_this_week = new_this_week_result.scalar() or 0
+    
+    new_today_result = await db.execute(
+        select(func.count(User.id)).where(
+            User.created_at >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+    )
+    new_today = new_today_result.scalar() or 0
+    
     temporal_stats = {
         "new_this_month": new_users_this_month,
-        "new_this_week": db.exec(
-            select(func.count(User.id)).where(
-                User.created_at >= datetime.now() - timedelta(days=7)
-            )
-        ).first() or 0,
-        "new_today": db.exec(
-            select(func.count(User.id)).where(
-                User.created_at >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            )
-        ).first() or 0
+        "new_this_week": new_this_week,
+        "new_today": new_today
     }
     
     # Utilisateurs avec 2FA activé
-    two_fa_enabled = db.exec(
+    two_fa_enabled_result = await db.execute(
         select(func.count(User.id)).where(User.two_factor_enabled == True)
-    ).first() or 0
+    )
+    two_fa_enabled = two_fa_enabled_result.scalar() or 0
     
     # Utilisateurs avec email vérifié
-    email_verified = db.exec(
+    email_verified_result = await db.execute(
         select(func.count(User.id)).where(User.email_verified == True)
-    ).first() or 0
+    )
+    email_verified = email_verified_result.scalar() or 0
     
     # Taux de conversion (utilisateurs actifs / total)
     conversion_rate = 0
