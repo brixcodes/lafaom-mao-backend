@@ -109,6 +109,7 @@ async def validation_exception_handler(request: Request, exc: HTTPException):
 
 
 origins = [
+    "https://admin.lafaom-mao.org",
     "http://admin.lafaom-mao.org",
     "http://localhost:5500",
     "http://localhost",
