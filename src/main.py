@@ -10,6 +10,7 @@ from src.api.payments.router import router as payments_router
 from src.api.auth.router import router as auth_router
 from src.api.training.routers import router as training_router
 from src.api.system.router import router as system_router
+from src.api.system.dashboard import router as dashboard_router
 
 import firebase_admin
 from firebase_admin import credentials
@@ -56,6 +57,7 @@ app.include_router(job_offers_router, prefix=base_url )
 app.include_router(training_router, prefix=base_url )
 app.include_router(payments_router, prefix=base_url + "/payments", tags=["Payments"])
 app.include_router(system_router, prefix=base_url + "/system", tags=["System"])
+app.include_router(dashboard_router, prefix=base_url + "/dashboard", tags=["Dashboard"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

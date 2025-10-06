@@ -1,37 +1,39 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, func, and_, or_
+from fastapi import APIRouter, Depends
+from sqlmodel import Session, select, func, and_
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 from src.database import get_db
-from src.api.user.models import User
-from src.api.training.models import Training, TrainingSession, StudentApplication
-from src.api.job_offers.models import JobOffer, JobApplication
-from src.api.payments.models import Payment, PaymentStatusEnum
-from src.api.blog.models import Post
-from src.api.training.models import Reclamation
+from src.api.user.models import User, Role, UserRole
 from src.api.auth.dependencies import get_current_user
 
 router = APIRouter()
 
-@router.get("/stats")
-async def get_dashboard_stats(
+@router.get("/users-stats")
+async def get_users_statistics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Récupérer les statistiques générales du dashboard"""
+    """Récupérer les statistiques détaillées des utilisateurs par rôles et statuts"""
     
-    # Statistiques des utilisateurs
+    # Statistiques générales
     total_users = db.exec(select(func.count(User.id))).first() or 0
     
-    # Utilisateurs créés ce mois
-    start_of_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    new_users_this_month = db.exec(
-        select(func.count(User.id)).where(User.created_at >= start_of_month)
+    # Utilisateurs actifs vs inactifs
+    active_users = db.exec(
+        select(func.count(User.id)).where(User.status == "ACTIVE")
     ).first() or 0
     
-    # Utilisateurs actifs (connexion dans les 30 derniers jours)
+    inactive_users = db.exec(
+        select(func.count(User.id)).where(User.status == "INACTIVE")
+    ).first() or 0
+    
+    pending_users = db.exec(
+        select(func.count(User.id)).where(User.status == "PENDING")
+    ).first() or 0
+    
+    # Utilisateurs avec connexion récente (30 derniers jours)
     thirty_days_ago = datetime.now() - timedelta(days=30)
-    active_users = db.exec(
+    recent_login_users = db.exec(
         select(func.count(User.id)).where(
             and_(
                 User.last_login.isnot(None),
@@ -40,408 +42,146 @@ async def get_dashboard_stats(
         )
     ).first() or 0
     
-    # Calcul du taux de croissance des utilisateurs
-    last_month_start = (start_of_month - timedelta(days=1)).replace(day=1)
-    users_last_month = db.exec(
-        select(func.count(User.id)).where(
-            and_(
-                User.created_at >= last_month_start,
-                User.created_at < start_of_month
-            )
-        )
+    # Utilisateurs créés ce mois
+    start_of_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    new_users_this_month = db.exec(
+        select(func.count(User.id)).where(User.created_at >= start_of_month)
     ).first() or 0
     
-    user_growth_rate = 0
-    if users_last_month > 0:
-        user_growth_rate = round(((new_users_this_month - users_last_month) / users_last_month) * 100, 2)
+    # Statistiques par rôles
+    roles_stats = []
+    all_roles = db.exec(select(Role)).all()
     
-    # Statistiques des formations
-    total_trainings = db.exec(select(func.count(Training.id))).first() or 0
-    active_sessions = db.exec(
-        select(func.count(TrainingSession.id)).where(
-            TrainingSession.status == "OPEN_FOR_REGISTRATION"
-        )
-    ).first() or 0
-    
-    total_applications = db.exec(select(func.count(StudentApplication.id))).first() or 0
-    approved_applications = db.exec(
-        select(func.count(StudentApplication.id)).where(
-            StudentApplication.status == "APPROVED"
-        )
-    ).first() or 0
-    
-    completion_rate = 0
-    if total_applications > 0:
-        completion_rate = round((approved_applications / total_applications) * 100, 2)
-    
-    # Statistiques des emplois
-    total_job_offers = db.exec(select(func.count(JobOffer.id))).first() or 0
-    new_job_offers_this_month = db.exec(
-        select(func.count(JobOffer.id)).where(JobOffer.created_at >= start_of_month)
-    ).first() or 0
-    
-    total_job_applications = db.exec(select(func.count(JobApplication.id))).first() or 0
-    approved_job_applications = db.exec(
-        select(func.count(JobApplication.id)).where(
-            JobApplication.status == "APPROVED"
-        )
-    ).first() or 0
-    
-    placement_rate = 0
-    if total_job_applications > 0:
-        placement_rate = round((approved_job_applications / total_job_applications) * 100, 2)
-    
-    # Statistiques des paiements
-    total_revenue = db.exec(
-        select(func.sum(Payment.product_amount)).where(
-            Payment.status == PaymentStatusEnum.ACCEPTED
-        )
-    ).first() or 0
-    
-    this_month_revenue = db.exec(
-        select(func.sum(Payment.product_amount)).where(
-            and_(
-                Payment.status == PaymentStatusEnum.ACCEPTED,
-                Payment.created_at >= start_of_month
-            )
-        )
-    ).first() or 0
-    
-    successful_transactions = db.exec(
-        select(func.count(Payment.id)).where(
-            Payment.status == PaymentStatusEnum.ACCEPTED
-        )
-    ).first() or 0
-    
-    pending_transactions = db.exec(
-        select(func.count(Payment.id)).where(
-            Payment.status == PaymentStatusEnum.PENDING
-        )
-    ).first() or 0
-    
-    # Calcul du taux de croissance des revenus
-    last_month_revenue = db.exec(
-        select(func.sum(Payment.product_amount)).where(
-            and_(
-                Payment.status == PaymentStatusEnum.ACCEPTED,
-                Payment.created_at >= last_month_start,
-                Payment.created_at < start_of_month
-            )
-        )
-    ).first() or 0
-    
-    revenue_growth_rate = 0
-    if last_month_revenue > 0:
-        revenue_growth_rate = round(((this_month_revenue - last_month_revenue) / last_month_revenue) * 100, 2)
-    
-    # Statistiques du blog
-    total_blog_posts = db.exec(select(func.count(Post.id))).first() or 0
-    published_posts = db.exec(
-        select(func.count(Post.id)).where(Post.published_at.isnot(None))
-    ).first() or 0
-    
-    # Statistiques des réclamations
-    total_reclamations = db.exec(select(func.count(Reclamation.id))).first() or 0
-    new_reclamations = db.exec(
-        select(func.count(Reclamation.id)).where(Reclamation.status == "NEW")
-    ).first() or 0
-    
-    in_progress_reclamations = db.exec(
-        select(func.count(Reclamation.id)).where(Reclamation.status == "IN_PROGRESS")
-    ).first() or 0
-    
-    closed_reclamations = db.exec(
-        select(func.count(Reclamation.id)).where(Reclamation.status == "CLOSED")
-    ).first() or 0
-    
-    resolution_rate = 0
-    if total_reclamations > 0:
-        resolution_rate = round((closed_reclamations / total_reclamations) * 100, 2)
-    
-    return {
-        "users": {
-            "total": total_users,
-            "new_this_month": new_users_this_month,
-            "active": active_users,
-            "growth_rate": user_growth_rate
-        },
-        "trainings": {
-            "total": total_trainings,
-            "active_sessions": active_sessions,
-            "applications": total_applications,
-            "completion_rate": completion_rate
-        },
-        "jobs": {
-            "total_offers": total_job_offers,
-            "applications": total_job_applications,
-            "placement_rate": placement_rate,
-            "new_this_month": new_job_offers_this_month
-        },
-        "payments": {
-            "total_revenue": float(total_revenue or 0),
-            "this_month_revenue": float(this_month_revenue or 0),
-            "successful_transactions": successful_transactions,
-            "pending_transactions": pending_transactions,
-            "growth_rate": revenue_growth_rate
-        },
-        "blog": {
-            "total_posts": total_blog_posts,
-            "published_posts": published_posts,
-            "total_views": 0,  # À implémenter si nécessaire
-            "engagement_rate": 0  # À implémenter si nécessaire
-        },
-        "reclamations": {
-            "total": total_reclamations,
-            "new": new_reclamations,
-            "in_progress": in_progress_reclamations,
-            "closed": closed_reclamations,
-            "resolution_rate": resolution_rate
-        }
-    }
-
-@router.get("/charts")
-async def get_dashboard_charts(
-    period: str = "month",
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Récupérer les données pour les graphiques du dashboard"""
-    
-    # Définir la période
-    if period == "week":
-        days = 7
-    elif period == "month":
-        days = 30
-    elif period == "year":
-        days = 365
-    else:
-        days = 30
-    
-    start_date = datetime.now() - timedelta(days=days)
-    
-    # Données des revenus par jour
-    revenue_data = []
-    for i in range(days):
-        date = start_date + timedelta(days=i)
-        next_date = date + timedelta(days=1)
+    for role in all_roles:
+        # Nombre d'utilisateurs par rôle
+        users_count = db.exec(
+            select(func.count(User.id))
+            .join(UserRole, User.id == UserRole.user_id)
+            .where(UserRole.role_id == role.id)
+        ).first() or 0
         
-        daily_revenue = db.exec(
-            select(func.sum(Payment.product_amount)).where(
+        # Utilisateurs actifs par rôle
+        active_count = db.exec(
+            select(func.count(User.id))
+            .join(UserRole, User.id == UserRole.user_id)
+            .where(
                 and_(
-                    Payment.status == PaymentStatusEnum.ACCEPTED,
-                    Payment.created_at >= date,
-                    Payment.created_at < next_date
+                    UserRole.role_id == role.id,
+                    User.status == "ACTIVE"
                 )
             )
         ).first() or 0
         
-        revenue_data.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "amount": float(daily_revenue or 0)
+        # Utilisateurs avec connexion récente par rôle
+        recent_login_count = db.exec(
+            select(func.count(User.id))
+            .join(UserRole, User.id == UserRole.user_id)
+            .where(
+                and_(
+                    UserRole.role_id == role.id,
+                    User.last_login.isnot(None),
+                    User.last_login >= thirty_days_ago
+                )
+            )
+        ).first() or 0
+        
+        roles_stats.append({
+            "role_id": role.id,
+            "role_name": role.name,
+            "role_description": role.description,
+            "total_users": users_count,
+            "active_users": active_count,
+            "recent_login_users": recent_login_count,
+            "inactive_users": users_count - active_count
         })
     
-    # Données des inscriptions utilisateurs par jour
-    user_registrations = []
-    for i in range(days):
-        date = start_date + timedelta(days=i)
-        next_date = date + timedelta(days=1)
-        
-        daily_registrations = db.exec(
+    # Statistiques par statut
+    status_stats = {
+        "ACTIVE": active_users,
+        "INACTIVE": inactive_users,
+        "PENDING": pending_users
+    }
+    
+    # Répartition géographique (si les utilisateurs ont des adresses)
+    geographic_stats = {
+        "by_country": {},
+        "by_city": {}
+    }
+    
+    # Utilisateurs par pays
+    users_by_country = db.exec(
+        select(User.country_code, func.count(User.id))
+        .where(User.country_code.isnot(None))
+        .group_by(User.country_code)
+    ).all()
+    
+    for country_code, count in users_by_country:
+        geographic_stats["by_country"][country_code] = count
+    
+    # Utilisateurs par ville
+    users_by_city = db.exec(
+        select(User.city, func.count(User.id))
+        .where(User.city.isnot(None))
+        .group_by(User.city)
+    ).all()
+    
+    for city, count in users_by_city:
+        geographic_stats["by_city"][city] = count
+    
+    # Statistiques temporelles
+    temporal_stats = {
+        "new_this_month": new_users_this_month,
+        "new_this_week": db.exec(
             select(func.count(User.id)).where(
-                and_(
-                    User.created_at >= date,
-                    User.created_at < next_date
-                )
+                User.created_at >= datetime.now() - timedelta(days=7)
+            )
+        ).first() or 0,
+        "new_today": db.exec(
+            select(func.count(User.id)).where(
+                User.created_at >= datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             )
         ).first() or 0
-        
-        user_registrations.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "count": daily_registrations
-        })
+    }
     
-    # Données des candidatures formations par jour
-    training_applications = []
-    for i in range(days):
-        date = start_date + timedelta(days=i)
-        next_date = date + timedelta(days=1)
-        
-        daily_applications = db.exec(
-            select(func.count(StudentApplication.id)).where(
-                and_(
-                    StudentApplication.created_at >= date,
-                    StudentApplication.created_at < next_date
-                )
-            )
-        ).first() or 0
-        
-        training_applications.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "count": daily_applications
-        })
+    # Utilisateurs avec 2FA activé
+    two_fa_enabled = db.exec(
+        select(func.count(User.id)).where(User.two_factor_enabled == True)
+    ).first() or 0
     
-    # Données des candidatures emplois par jour
-    job_applications = []
-    for i in range(days):
-        date = start_date + timedelta(days=i)
-        next_date = date + timedelta(days=1)
-        
-        daily_job_applications = db.exec(
-            select(func.count(JobApplication.id)).where(
-                and_(
-                    JobApplication.created_at >= date,
-                    JobApplication.created_at < next_date
-                )
-            )
-        ).first() or 0
-        
-        job_applications.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "count": daily_job_applications
-        })
+    # Utilisateurs avec email vérifié
+    email_verified = db.exec(
+        select(func.count(User.id)).where(User.email_verified == True)
+    ).first() or 0
+    
+    # Taux de conversion (utilisateurs actifs / total)
+    conversion_rate = 0
+    if total_users > 0:
+        conversion_rate = round((active_users / total_users) * 100, 2)
+    
+    # Taux d'engagement (connexions récentes / total)
+    engagement_rate = 0
+    if total_users > 0:
+        engagement_rate = round((recent_login_users / total_users) * 100, 2)
     
     return {
-        "revenue_trend": revenue_data,
-        "user_registrations": user_registrations,
-        "training_applications": training_applications,
-        "job_applications": job_applications
+        "overview": {
+            "total_users": total_users,
+            "active_users": active_users,
+            "inactive_users": inactive_users,
+            "pending_users": pending_users,
+            "recent_login_users": recent_login_users,
+            "conversion_rate": conversion_rate,
+            "engagement_rate": engagement_rate
+        },
+        "by_status": status_stats,
+        "by_roles": roles_stats,
+        "geographic": geographic_stats,
+        "temporal": temporal_stats,
+        "security": {
+            "two_fa_enabled": two_fa_enabled,
+            "email_verified": email_verified,
+            "two_fa_rate": round((two_fa_enabled / total_users) * 100, 2) if total_users > 0 else 0,
+            "email_verification_rate": round((email_verified / total_users) * 100, 2) if total_users > 0 else 0
+        },
+        "generated_at": datetime.now().isoformat()
     }
-
-@router.get("/activities")
-async def get_recent_activities(
-    limit: int = 10,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Récupérer les activités récentes"""
-    
-    activities = []
-    
-    # Récupérer les utilisateurs récents
-    recent_users = db.exec(
-        select(User).order_by(User.created_at.desc()).limit(5)
-    ).all()
-    
-    for user in recent_users:
-        activities.append({
-            "id": f"user_{user.id}",
-            "type": "user",
-            "title": f"Nouvel utilisateur: {user.first_name} {user.last_name}",
-            "description": f"Email: {user.email}",
-            "timestamp": user.created_at.isoformat(),
-            "status": user.status
-        })
-    
-    # Récupérer les candidatures formations récentes
-    recent_training_applications = db.exec(
-        select(StudentApplication).order_by(StudentApplication.created_at.desc()).limit(5)
-    ).all()
-    
-    for app in recent_training_applications:
-        activities.append({
-            "id": f"training_app_{app.id}",
-            "type": "training",
-            "title": f"Nouvelle candidature formation",
-            "description": f"Numéro: {app.application_number}",
-            "timestamp": app.created_at.isoformat(),
-            "status": app.status
-        })
-    
-    # Récupérer les candidatures emplois récentes
-    recent_job_applications = db.exec(
-        select(JobApplication).order_by(JobApplication.created_at.desc()).limit(5)
-    ).all()
-    
-    for app in recent_job_applications:
-        activities.append({
-            "id": f"job_app_{app.id}",
-            "type": "job",
-            "title": f"Nouvelle candidature emploi",
-            "description": f"Nom: {app.first_name} {app.last_name}",
-            "timestamp": app.created_at.isoformat(),
-            "status": app.status
-        })
-    
-    # Récupérer les paiements récents
-    recent_payments = db.exec(
-        select(Payment).order_by(Payment.created_at.desc()).limit(5)
-    ).all()
-    
-    for payment in recent_payments:
-        activities.append({
-            "id": f"payment_{payment.id}",
-            "type": "payment",
-            "title": f"Nouveau paiement",
-            "description": f"Montant: {payment.product_amount} {payment.product_currency}",
-            "timestamp": payment.created_at.isoformat(),
-            "status": payment.status,
-            "amount": payment.product_amount
-        })
-    
-    # Trier par timestamp et limiter
-    activities.sort(key=lambda x: x["timestamp"], reverse=True)
-    return activities[:limit]
-
-@router.get("/alerts")
-async def get_dashboard_alerts(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Récupérer les alertes du dashboard"""
-    
-    alerts = []
-    
-    # Alertes pour les paiements en attente
-    pending_payments = db.exec(
-        select(func.count(Payment.id)).where(
-            Payment.status == PaymentStatusEnum.PENDING
-        )
-    ).first() or 0
-    
-    if pending_payments > 0:
-        alerts.append({
-            "id": "pending_payments",
-            "type": "warning",
-            "title": "Paiements en attente",
-            "message": f"{pending_payments} paiement(s) en attente de traitement",
-            "action_required": True,
-            "created_at": datetime.now().isoformat()
-        })
-    
-    # Alertes pour les réclamations non traitées
-    new_reclamations = db.exec(
-        select(func.count(Reclamation.id)).where(Reclamation.status == "NEW")
-    ).first() or 0
-    
-    if new_reclamations > 0:
-        alerts.append({
-            "id": "new_reclamations",
-            "type": "error",
-            "title": "Nouvelles réclamations",
-            "message": f"{new_reclamations} réclamation(s) non traitée(s)",
-            "action_required": True,
-            "created_at": datetime.now().isoformat()
-        })
-    
-    # Alertes pour les sessions de formation qui se terminent bientôt
-    upcoming_sessions = db.exec(
-        select(func.count(TrainingSession.id)).where(
-            and_(
-                TrainingSession.end_date.isnot(None),
-                TrainingSession.end_date <= datetime.now() + timedelta(days=7),
-                TrainingSession.status == "ONGOING"
-            )
-        )
-    ).first() or 0
-    
-    if upcoming_sessions > 0:
-        alerts.append({
-            "id": "upcoming_sessions",
-            "type": "info",
-            "title": "Sessions se terminant bientôt",
-            "message": f"{upcoming_sessions} session(s) se termine(nt) dans les 7 prochains jours",
-            "action_required": False,
-            "created_at": datetime.now().isoformat()
-        })
-    
-    return alerts
