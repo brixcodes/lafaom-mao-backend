@@ -270,28 +270,20 @@ async def get_comprehensive_statistics(
         reclamations_by_status = {}
         reclamations_by_priority = {}
     
-    # ===== STATISTIQUES PAIEMENTS =====
+    # ===== STATISTIQUES PAIEMENTS (SIMPLIFIÉES) =====
     try:
         from src.api.payments.models import Payment, CinetPayPayment
         
+        # Total des paiements généraux
         total_payments_result = await db.execute(select(func.count(Payment.id)))
         total_payments = total_payments_result.scalar() or 0
         
-        # Paiements par statut
-        payments_by_status = {}
-        for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
-            result = await db.execute(
-                select(func.count(Payment.id)).where(Payment.status == status)
-            )
-            payments_by_status[status] = result.scalar() or 0
-        
-        # Paiements CinetPay
+        # Total des paiements CinetPay
         total_cinetpay_result = await db.execute(select(func.count(CinetPayPayment.id)))
         total_cinetpay = total_cinetpay_result.scalar() or 0
         
     except ImportError:
         total_payments = 0
-        payments_by_status = {}
         total_cinetpay = 0
     
     return {
@@ -346,7 +338,6 @@ async def get_comprehensive_statistics(
         },
         "payments": {
             "total_payments": total_payments,
-            "by_status": payments_by_status,
             "total_cinetpay": total_cinetpay
         },
         "sessions": {
@@ -358,33 +349,29 @@ async def get_comprehensive_statistics(
 async def get_payment_statistics(
     db: AsyncSession = Depends(get_session_async)
 ):
-    """Récupérer toutes les statistiques détaillées sur les paiements"""
+    """Récupérer toutes les statistiques détaillées sur les paiements (OPTIMISÉ)"""
     
-    # ===== STATISTIQUES PAIEMENTS GÉNÉRAUX =====
+    # ===== STATISTIQUES PAIEMENTS GÉNÉRAUX (EUR) =====
     try:
         from src.api.payments.models import Payment, CinetPayPayment
         
-        # Total des paiements
-        total_payments_result = await db.execute(select(func.count(Payment.id)))
-        total_payments = total_payments_result.scalar() or 0
-        
-        # Paiements par statut
+        # Paiements généraux par statut et montants
         payments_by_status = {}
-        for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
-            result = await db.execute(
-                select(func.count(Payment.id)).where(Payment.status == status)
-            )
-            payments_by_status[status] = result.scalar() or 0
-        
-        # Montants totaux par statut
         amounts_by_status = {}
         for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
-            result = await db.execute(
+            # Nombre de paiements par statut
+            count_result = await db.execute(
+                select(func.count(Payment.id)).where(Payment.status == status)
+            )
+            payments_by_status[status] = count_result.scalar() or 0
+            
+            # Montants par statut
+            amount_result = await db.execute(
                 select(func.sum(Payment.product_amount)).where(Payment.status == status)
             )
-            amounts_by_status[status] = float(result.scalar() or 0)
+            amounts_by_status[status] = float(amount_result.scalar() or 0)
         
-        # Paiements par devise
+        # Paiements par devise (EUR uniquement)
         payments_by_currency_result = await db.execute(
             select(Payment.product_currency, func.count(Payment.id), func.sum(Payment.product_amount))
             .group_by(Payment.product_currency)
@@ -408,27 +395,31 @@ async def get_payment_statistics(
                 "total_amount": float(total_amount or 0)
             }
         
-        # Paiements CinetPay
-        total_cinetpay_result = await db.execute(select(func.count(CinetPayPayment.id)))
-        total_cinetpay = total_cinetpay_result.scalar() or 0
-        
-        # CinetPay par statut
+    except ImportError:
+        payments_by_status = {}
+        amounts_by_status = {}
+        payments_by_currency = {}
+        payments_by_method = {}
+    
+    # ===== STATISTIQUES CINETPAY (XAF) =====
+    try:
+        # CinetPay par statut et montants
         cinetpay_by_status = {}
-        for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
-            result = await db.execute(
-                select(func.count(CinetPayPayment.id)).where(CinetPayPayment.status == status)
-            )
-            cinetpay_by_status[status] = result.scalar() or 0
-        
-        # Montants CinetPay par statut
         cinetpay_amounts_by_status = {}
         for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
-            result = await db.execute(
+            # Nombre de paiements CinetPay par statut
+            count_result = await db.execute(
+                select(func.count(CinetPayPayment.id)).where(CinetPayPayment.status == status)
+            )
+            cinetpay_by_status[status] = count_result.scalar() or 0
+            
+            # Montants CinetPay par statut
+            amount_result = await db.execute(
                 select(func.sum(CinetPayPayment.amount)).where(CinetPayPayment.status == status)
             )
-            cinetpay_amounts_by_status[status] = float(result.scalar() or 0)
+            cinetpay_amounts_by_status[status] = float(amount_result.scalar() or 0)
         
-        # Paiements par devise CinetPay
+        # CinetPay par devise (XAF uniquement)
         cinetpay_by_currency_result = await db.execute(
             select(CinetPayPayment.currency, func.count(CinetPayPayment.id), func.sum(CinetPayPayment.amount))
             .group_by(CinetPayPayment.currency)
@@ -440,30 +431,10 @@ async def get_payment_statistics(
                 "total_amount": float(total_amount or 0)
             }
         
-        # Paiements par méthode CinetPay
-        cinetpay_by_method_result = await db.execute(
-            select(CinetPayPayment.payment_method, func.count(CinetPayPayment.id), func.sum(CinetPayPayment.amount))
-            .where(CinetPayPayment.payment_method.isnot(None))
-            .group_by(CinetPayPayment.payment_method)
-        )
-        cinetpay_by_method = {}
-        for method, count, total_amount in cinetpay_by_method_result.all():
-            cinetpay_by_method[method] = {
-                "count": count,
-                "total_amount": float(total_amount or 0)
-            }
-        
     except ImportError:
-        total_payments = 0
-        payments_by_status = {}
-        amounts_by_status = {}
-        payments_by_currency = {}
-        payments_by_method = {}
-        total_cinetpay = 0
         cinetpay_by_status = {}
         cinetpay_amounts_by_status = {}
         cinetpay_by_currency = {}
-        cinetpay_by_method = {}
     
     # ===== STATISTIQUES PAIEMENTS FORMATIONS =====
     try:
@@ -607,12 +578,12 @@ async def get_payment_statistics(
         submission_fees_by_status = {}
         job_applications_by_currency = {}
     
-    # ===== STATISTIQUES TEMPORELLES =====
+    # ===== STATISTIQUES TEMPORELLES (OPTIMISÉES) =====
     this_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     this_week_start = datetime.now() - timedelta(days=7)
     
+    # Paiements généraux ce mois
     try:
-        # Paiements ce mois
         payments_this_month_result = await db.execute(
             select(func.count(Payment.id), func.sum(Payment.product_amount))
             .where(Payment.created_at >= this_month_start)
@@ -620,7 +591,7 @@ async def get_payment_statistics(
         payments_this_month_count, payments_this_month_amount = payments_this_month_result.first()
         payments_this_month_amount = float(payments_this_month_amount or 0)
         
-        # Paiements cette semaine
+        # Paiements généraux cette semaine
         payments_this_week_result = await db.execute(
             select(func.count(Payment.id), func.sum(Payment.product_amount))
             .where(Payment.created_at >= this_week_start)
@@ -628,7 +599,12 @@ async def get_payment_statistics(
         payments_this_week_count, payments_this_week_amount = payments_this_week_result.first()
         payments_this_week_amount = float(payments_this_week_amount or 0)
         
-        # CinetPay ce mois
+    except ImportError:
+        payments_this_month_count = payments_this_month_amount = 0
+        payments_this_week_count = payments_this_week_amount = 0
+    
+    # CinetPay ce mois
+    try:
         cinetpay_this_month_result = await db.execute(
             select(func.count(CinetPayPayment.id), func.sum(CinetPayPayment.amount))
             .where(CinetPayPayment.created_at >= this_month_start)
@@ -637,13 +613,11 @@ async def get_payment_statistics(
         cinetpay_this_month_amount = float(cinetpay_this_month_amount or 0)
         
     except ImportError:
-        payments_this_month_count = payments_this_month_amount = 0
-        payments_this_week_count = payments_this_week_amount = 0
         cinetpay_this_month_count = cinetpay_this_month_amount = 0
     
     return {
         "general_payments": {
-            "total_payments": total_payments,
+            "total_payments": sum(payments_by_status.values()) if payments_by_status else 0,
             "by_status": payments_by_status,
             "amounts_by_status": amounts_by_status,
             "by_currency": payments_by_currency,
@@ -658,11 +632,10 @@ async def get_payment_statistics(
             }
         },
         "cinetpay_payments": {
-            "total": total_cinetpay,
+            "total": sum(cinetpay_by_status.values()) if cinetpay_by_status else 0,
             "by_status": cinetpay_by_status,
             "amounts_by_status": cinetpay_amounts_by_status,
             "by_currency": cinetpay_by_currency,
-            "by_method": cinetpay_by_method,
             "this_month": {
                 "count": cinetpay_this_month_count,
                 "amount": cinetpay_this_month_amount
