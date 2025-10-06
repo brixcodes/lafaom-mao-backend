@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends
-from src.api.auth.utils import get_current_user
 from sqlmodel import select, func, and_
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -11,8 +10,7 @@ router = APIRouter()
 
 @router.get("/users-stats")
 async def get_users_statistics(
-    db: AsyncSession = Depends(get_session_async),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_session_async)
 ):
     """Récupérer les statistiques détaillées des utilisateurs par rôles et statuts"""
     
