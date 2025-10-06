@@ -345,6 +345,11 @@ class CinetPayService:
 
     async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
 
+        # Debug: Afficher les valeurs des paramètres Visa
+        print(f"DEBUG Visa Config - ENABLE_VISA: {settings.CINETPAY_ENABLE_VISA}")
+        print(f"DEBUG Visa Config - VISA_SECURED: {settings.CINETPAY_VISA_SECURED}")
+        print(f"DEBUG Visa Config - CHANNELS: {settings.CINETPAY_CHANNELS}")
+        
         payload = {
             "amount": payment_data.amount,
             "currency": payment_data.currency,
@@ -352,7 +357,7 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD",
+            "channels": settings.CINETPAY_CHANNELS,
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
             "meta": payment_data.meta,
