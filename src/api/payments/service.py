@@ -353,17 +353,22 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": settings.CINETPAY_CHANNELS,
+            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD",
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
             "meta": payment_data.meta,
             "invoice_data": payment_data.invoice_data,
             # Configuration spécifique pour activer Visa
-            "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
-            "is_visa_secured": settings.CINETPAY_VISA_SECURED,
+            "can_pay_with_visa_api": True,
+            "is_visa_secured": True,
             # Paramètres supplémentaires pour forcer l'affichage des cartes
             "payment_method": "CREDIT_CARD",
             "gateway_progress": "BEGIN_PAYMENT",
+            # Paramètres spécifiques CinetPay pour les cartes bancaires
+            "alternative_amount_in_customer_country": "0",
+            "alternative_currency": None,
+            "buyer_country": "CM",
+            "funds_destination": None,
             # Champs requis pour CinetPay
             "lang": "fr",
             "cpm_version": "V4",
