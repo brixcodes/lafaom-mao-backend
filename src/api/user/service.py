@@ -122,11 +122,15 @@ class UserService:
         # Handle both dict and Pydantic model inputs
         if isinstance(user_create_input, dict):
             user_data = user_create_input.copy()
+            # Save the plain password before hashing for email notification
+            plain_password = user_data["password"]
             if not password_hash:
                 user_data["password"] = pwd_context.hash(user_data["password"])
         else:
             # Pydantic model
             user_data = user_create_input.model_dump()
+            # Save the plain password before hashing for email notification
+            plain_password = user_data["password"]
             if not password_hash:
                 user_data["password"] = pwd_context.hash(user_data["password"])
         
@@ -137,7 +141,7 @@ class UserService:
         
         notification = SendPasswordNotification(
             email=user_data["email"],
-            password=user_data["password"],
+            password=plain_password,  # Use the plain password for email
             lang="en"  # Default to English, could be made configurable
         )
         
