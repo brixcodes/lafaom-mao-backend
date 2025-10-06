@@ -119,16 +119,25 @@ class UserService:
         return user
 
     async def create(self, user_create_input, password_hash: bool = False):
-        if not password_hash:
-            user_create_input.password = pwd_context.hash(user_create_input.password)
-        user = User(**user_create_input.model_dump())
+        # Handle both dict and Pydantic model inputs
+        if isinstance(user_create_input, dict):
+            user_data = user_create_input.copy()
+            if not password_hash:
+                user_data["password"] = pwd_context.hash(user_data["password"])
+        else:
+            # Pydantic model
+            user_data = user_create_input.model_dump()
+            if not password_hash:
+                user_data["password"] = pwd_context.hash(user_data["password"])
+        
+        user = User(**user_data)
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
         
         notification = SendPasswordNotification(
-            email=user_create_input.email,
-            password=user_create_input.password,
+            email=user_data["email"],
+            password=user_data["password"],
             lang="en"  # Default to English, could be made configurable
         )
         

@@ -68,7 +68,7 @@ class StudentApplicationService:
         if user is None:
             # create a user with default password
             default_password = generate_password(8)
-            create_input = type("Obj", (), {
+            create_input = {
                 "first_name": data.first_name or "",
                 "last_name": data.last_name or "",
                 "country_code": data.country_code or "CM",
@@ -76,7 +76,7 @@ class StudentApplicationService:
                 "email": data.email,
                 "password": default_password,
                 "user_type": UserTypeEnum.STUDENT,
-            })
+            }
             user = await user_service.create(create_input)
             
             SendPasswordNotification(
