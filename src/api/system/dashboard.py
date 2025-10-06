@@ -128,16 +128,8 @@ async def get_users_statistics(
     for country_code, count in users_by_country:
         geographic_stats["by_country"][country_code] = count
     
-    # Utilisateurs par ville
-    users_by_city_result = await db.execute(
-        select(User.city, func.count(User.id))
-        .where(User.city.isnot(None))
-        .group_by(User.city)
-    )
-    users_by_city = users_by_city_result.all()
-    
-    for city, count in users_by_city:
-        geographic_stats["by_city"][city] = count
+    # Note: Les statistiques par ville nécessiteraient une jointure avec la table Address
+    # Pour l'instant, nous nous concentrons sur les statistiques par pays
     
     # Statistiques temporelles
     new_this_week_result = await db.execute(
