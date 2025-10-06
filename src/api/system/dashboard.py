@@ -481,6 +481,18 @@ async def get_payment_statistics(
         )
         applications_without_payment = applications_without_payment_result.scalar() or 0
         
+        # Montants totaux des frais d'étude de dossier (tous statuts confondus)
+        total_registration_fees_result = await db.execute(
+            select(func.sum(StudentApplication.registration_fee))
+        )
+        total_registration_fees = float(total_registration_fees_result.scalar() or 0)
+        
+        # Montants totaux des frais de formation (tous statuts confondus)
+        total_training_fees_result = await db.execute(
+            select(func.sum(StudentApplication.training_fee))
+        )
+        total_training_fees = float(total_training_fees_result.scalar() or 0)
+        
         # Montants des frais d'inscription par statut de candidature
         registration_fees_by_status = {}
         for status in ["RECEIVED", "SUBMITTED", "REFUSED", "APPROVED"]:
@@ -539,6 +551,7 @@ async def get_payment_statistics(
         
     except ImportError:
         applications_with_payment = applications_without_payment = 0
+        total_registration_fees = total_training_fees = 0.0
         registration_fees_by_status = {}
         training_fees_by_status = {}
         applications_by_currency = {}
@@ -562,6 +575,12 @@ async def get_payment_statistics(
         )
         job_applications_without_payment = job_applications_without_payment_result.scalar() or 0
         
+        # Montant total des frais de soumission (tous statuts confondus)
+        total_submission_fees_result = await db.execute(
+            select(func.sum(JobApplication.submission_fee))
+        )
+        total_submission_fees = float(total_submission_fees_result.scalar() or 0)
+        
         # Frais de soumission par statut
         submission_fees_by_status = {}
         for status in ["RECEIVED", "REFUSED", "APPROVED"]:
@@ -584,6 +603,7 @@ async def get_payment_statistics(
         
     except ImportError:
         job_applications_with_payment = job_applications_without_payment = 0
+        total_submission_fees = 0.0
         submission_fees_by_status = {}
         job_applications_by_currency = {}
     
@@ -651,6 +671,8 @@ async def get_payment_statistics(
         "training_payments": {
             "applications_with_payment": applications_with_payment,
             "applications_without_payment": applications_without_payment,
+            "total_registration_fees": total_registration_fees,
+            "total_training_fees": total_training_fees,
             "registration_fees_by_status": registration_fees_by_status,
             "training_fees_by_status": training_fees_by_status,
             "by_currency": applications_by_currency,
@@ -664,6 +686,7 @@ async def get_payment_statistics(
         "job_payments": {
             "applications_with_payment": job_applications_with_payment,
             "applications_without_payment": job_applications_without_payment,
+            "total_submission_fees": total_submission_fees,
             "submission_fees_by_status": submission_fees_by_status,
             "by_currency": job_applications_by_currency
         }
