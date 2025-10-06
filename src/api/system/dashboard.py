@@ -349,94 +349,237 @@ async def get_comprehensive_statistics(
 async def get_payment_statistics(
     db: AsyncSession = Depends(get_session_async)
 ):
-    """Récupérer toutes les statistiques détaillées sur les paiements (OPTIMISÉ)"""
+    """Récupérer les statistiques détaillées des paiements par module et statut"""
     
-    # ===== STATISTIQUES PAIEMENTS GÉNÉRAUX (EUR) =====
+    # ===== STATISTIQUES FORMATIONS DÉTAILLÉES =====
+    training_stats = {}
+    try:
+        from src.api.training.models import StudentApplication
+        
+        # Statistiques par statut pour les formations
+        for status in ["RECEIVED", "SUBMITTED", "REFUSED", "APPROVED"]:
+            # Frais d'étude de dossier par statut
+            registration_fees_result = await db.execute(
+                select(
+                    func.sum(StudentApplication.registration_fee),
+                    func.count(StudentApplication.id),
+                    func.count(StudentApplication.id).filter(StudentApplication.payment_id.isnot(None)),
+                    func.count(StudentApplication.id).filter(StudentApplication.payment_id.is_(None))
+                ).where(StudentApplication.status == status)
+            )
+            reg_total, reg_count, reg_paid, reg_unpaid = registration_fees_result.first()
+            
+            # Frais de formation par statut
+            training_fees_result = await db.execute(
+                select(
+                    func.sum(StudentApplication.training_fee),
+                    func.count(StudentApplication.id),
+                    func.count(StudentApplication.id).filter(StudentApplication.payment_id.isnot(None)),
+                    func.count(StudentApplication.id).filter(StudentApplication.payment_id.is_(None))
+                ).where(StudentApplication.status == status)
+            )
+            train_total, train_count, train_paid, train_unpaid = training_fees_result.first()
+            
+            training_stats[status] = {
+                "registration_fees": {
+                    "total_amount": float(reg_total or 0),
+                    "total_count": reg_count or 0,
+                    "paid_count": reg_paid or 0,
+                    "unpaid_count": reg_unpaid or 0
+                },
+                "training_fees": {
+                    "total_amount": float(train_total or 0),
+                    "total_count": train_count or 0,
+                    "paid_count": train_paid or 0,
+                    "unpaid_count": train_unpaid or 0
+                }
+            }
+        
+        # Totaux généraux pour les formations
+        total_registration_result = await db.execute(
+            select(
+                func.sum(StudentApplication.registration_fee),
+                func.count(StudentApplication.id),
+                func.count(StudentApplication.id).filter(StudentApplication.payment_id.isnot(None)),
+                func.count(StudentApplication.id).filter(StudentApplication.payment_id.is_(None))
+            )
+        )
+        total_reg_amount, total_reg_count, total_reg_paid, total_reg_unpaid = total_registration_result.first()
+        
+        total_training_result = await db.execute(
+            select(
+                func.sum(StudentApplication.training_fee),
+                func.count(StudentApplication.id),
+                func.count(StudentApplication.id).filter(StudentApplication.payment_id.isnot(None)),
+                func.count(StudentApplication.id).filter(StudentApplication.payment_id.is_(None))
+            )
+        )
+        total_train_amount, total_train_count, total_train_paid, total_train_unpaid = total_training_result.first()
+        
+        training_stats["TOTAL"] = {
+            "registration_fees": {
+                "total_amount": float(total_reg_amount or 0),
+                "total_count": total_reg_count or 0,
+                "paid_count": total_reg_paid or 0,
+                "unpaid_count": total_reg_unpaid or 0
+            },
+            "training_fees": {
+                "total_amount": float(total_train_amount or 0),
+                "total_count": total_train_count or 0,
+                "paid_count": total_train_paid or 0,
+                "unpaid_count": total_train_unpaid or 0
+            }
+        }
+        
+    except ImportError:
+        training_stats = {}
+    
+    # ===== STATISTIQUES OFFRES D'EMPLOI DÉTAILLÉES =====
+    job_stats = {}
+    try:
+        from src.api.job_offers.models import JobApplication
+        
+        # Statistiques par statut pour les offres d'emploi
+        for status in ["RECEIVED", "REFUSED", "APPROVED"]:
+            # Frais de soumission par statut
+            submission_fees_result = await db.execute(
+                select(
+                    func.sum(JobApplication.submission_fee),
+                    func.count(JobApplication.id),
+                    func.count(JobApplication.id).filter(JobApplication.payment_id.isnot(None)),
+                    func.count(JobApplication.id).filter(JobApplication.payment_id.is_(None))
+                ).where(JobApplication.status == status)
+            )
+            sub_total, sub_count, sub_paid, sub_unpaid = submission_fees_result.first()
+            
+            job_stats[status] = {
+                "submission_fees": {
+                    "total_amount": float(sub_total or 0),
+                    "total_count": sub_count or 0,
+                    "paid_count": sub_paid or 0,
+                    "unpaid_count": sub_unpaid or 0
+                }
+            }
+        
+        # Totaux généraux pour les offres d'emploi
+        total_submission_result = await db.execute(
+            select(
+                func.sum(JobApplication.submission_fee),
+                func.count(JobApplication.id),
+                func.count(JobApplication.id).filter(JobApplication.payment_id.isnot(None)),
+                func.count(JobApplication.id).filter(JobApplication.payment_id.is_(None))
+            )
+        )
+        total_sub_amount, total_sub_count, total_sub_paid, total_sub_unpaid = total_submission_result.first()
+        
+        job_stats["TOTAL"] = {
+            "submission_fees": {
+                "total_amount": float(total_sub_amount or 0),
+                "total_count": total_sub_count or 0,
+                "paid_count": total_sub_paid or 0,
+                "unpaid_count": total_sub_unpaid or 0
+            }
+        }
+        
+    except ImportError:
+        job_stats = {}
+    
+    # ===== STATISTIQUES GLOBALES CUMULÉES =====
+    global_stats = {}
     try:
         from src.api.payments.models import Payment, CinetPayPayment
         
-        # Paiements généraux par statut et montants
-        payments_by_status = {}
-        amounts_by_status = {}
+        # Paiements généraux par statut
         for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
             # Nombre de paiements par statut
             count_result = await db.execute(
                 select(func.count(Payment.id)).where(Payment.status == status)
             )
-            payments_by_status[status] = count_result.scalar() or 0
+            count = count_result.scalar() or 0
             
             # Montants par statut
             amount_result = await db.execute(
                 select(func.sum(Payment.product_amount)).where(Payment.status == status)
             )
-            amounts_by_status[status] = float(amount_result.scalar() or 0)
-        
-        # Paiements par devise (EUR uniquement)
-        payments_by_currency_result = await db.execute(
-            select(Payment.product_currency, func.count(Payment.id), func.sum(Payment.product_amount))
-            .group_by(Payment.product_currency)
-        )
-        payments_by_currency = {}
-        for currency, count, total_amount in payments_by_currency_result.all():
-            payments_by_currency[currency] = {
+            amount = float(amount_result.scalar() or 0)
+            
+            global_stats[status] = {
                 "count": count,
-                "total_amount": float(total_amount or 0)
+                "amount": amount
             }
         
-        # Paiements par méthode
-        payments_by_method_result = await db.execute(
-            select(Payment.payment_type, func.count(Payment.id), func.sum(Payment.product_amount))
-            .group_by(Payment.payment_type)
-        )
-        payments_by_method = {}
-        for method, count, total_amount in payments_by_method_result.all():
-            payments_by_method[method] = {
-                "count": count,
-                "total_amount": float(total_amount or 0)
-            }
-        
-    except ImportError:
-        payments_by_status = {}
-        amounts_by_status = {}
-        payments_by_currency = {}
-        payments_by_method = {}
-    
-    # ===== STATISTIQUES CINETPAY (XAF) =====
-    try:
-        # CinetPay par statut et montants
-        cinetpay_by_status = {}
-        cinetpay_amounts_by_status = {}
+        # CinetPay par statut
         for status in ["pending", "accepted", "refused", "cancelled", "error", "rembourse"]:
             # Nombre de paiements CinetPay par statut
             count_result = await db.execute(
                 select(func.count(CinetPayPayment.id)).where(CinetPayPayment.status == status)
             )
-            cinetpay_by_status[status] = count_result.scalar() or 0
+            count = count_result.scalar() or 0
             
             # Montants CinetPay par statut
             amount_result = await db.execute(
                 select(func.sum(CinetPayPayment.amount)).where(CinetPayPayment.status == status)
             )
-            cinetpay_amounts_by_status[status] = float(amount_result.scalar() or 0)
-        
-        # CinetPay par devise (XAF uniquement)
-        cinetpay_by_currency_result = await db.execute(
-            select(CinetPayPayment.currency, func.count(CinetPayPayment.id), func.sum(CinetPayPayment.amount))
-            .group_by(CinetPayPayment.currency)
-        )
-        cinetpay_by_currency = {}
-        for currency, count, total_amount in cinetpay_by_currency_result.all():
-            cinetpay_by_currency[currency] = {
+            amount = float(amount_result.scalar() or 0)
+            
+            global_stats[f"cinetpay_{status}"] = {
                 "count": count,
-                "total_amount": float(total_amount or 0)
+                "amount": amount
             }
         
     except ImportError:
-        cinetpay_by_status = {}
-        cinetpay_amounts_by_status = {}
-        cinetpay_by_currency = {}
+        global_stats = {}
     
-    # ===== STATISTIQUES PAIEMENTS FORMATIONS =====
+    # ===== STATISTIQUES TEMPORELLES =====
+    this_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    this_week_start = datetime.now() - timedelta(days=7)
+    
+    temporal_stats = {}
+    try:
+        # Paiements généraux ce mois
+        payments_this_month_result = await db.execute(
+            select(func.count(Payment.id), func.sum(Payment.product_amount))
+            .where(Payment.created_at >= this_month_start)
+        )
+        payments_this_month_count, payments_this_month_amount = payments_this_month_result.first()
+        
+        # Paiements généraux cette semaine
+        payments_this_week_result = await db.execute(
+            select(func.count(Payment.id), func.sum(Payment.product_amount))
+            .where(Payment.created_at >= this_week_start)
+        )
+        payments_this_week_count, payments_this_week_amount = payments_this_week_result.first()
+        
+        # CinetPay ce mois
+        cinetpay_this_month_result = await db.execute(
+            select(func.count(CinetPayPayment.id), func.sum(CinetPayPayment.amount))
+            .where(CinetPayPayment.created_at >= this_month_start)
+        )
+        cinetpay_this_month_count, cinetpay_this_month_amount = cinetpay_this_month_result.first()
+        
+        temporal_stats = {
+            "general_payments": {
+                "this_month": {
+                    "count": payments_this_month_count or 0,
+                    "amount": float(payments_this_month_amount or 0)
+                },
+                "this_week": {
+                    "count": payments_this_week_count or 0,
+                    "amount": float(payments_this_week_amount or 0)
+                }
+            },
+            "cinetpay_payments": {
+                "this_month": {
+                    "count": cinetpay_this_month_count or 0,
+                    "amount": float(cinetpay_this_month_amount or 0)
+                }
+            }
+        }
+        
+    except ImportError:
+        temporal_stats = {}
+    
+    # ===== STATISTIQUES PAIEMENTS FORMATIONS (LEGACY) =====
     try:
         from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
         
@@ -616,51 +759,8 @@ async def get_payment_statistics(
         cinetpay_this_month_count = cinetpay_this_month_amount = 0
     
     return {
-        "general_payments": {
-            "total_payments": sum(payments_by_status.values()) if payments_by_status else 0,
-            "by_status": payments_by_status,
-            "amounts_by_status": amounts_by_status,
-            "by_currency": payments_by_currency,
-            "by_method": payments_by_method,
-            "this_month": {
-                "count": payments_this_month_count,
-                "amount": payments_this_month_amount
-            },
-            "this_week": {
-                "count": payments_this_week_count,
-                "amount": payments_this_week_amount
-            }
-        },
-        "cinetpay_payments": {
-            "total": sum(cinetpay_by_status.values()) if cinetpay_by_status else 0,
-            "by_status": cinetpay_by_status,
-            "amounts_by_status": cinetpay_amounts_by_status,
-            "by_currency": cinetpay_by_currency,
-            "this_month": {
-                "count": cinetpay_this_month_count,
-                "amount": cinetpay_this_month_amount
-            }
-        },
-        "training_payments": {
-            "applications_with_payment": applications_with_payment,
-            "applications_without_payment": applications_without_payment,
-            "total_registration_fees": total_registration_fees,
-            "total_training_fees": total_training_fees,
-            "registration_fees_by_status": registration_fees_by_status,
-            "training_fees_by_status": training_fees_by_status,
-            "by_currency": applications_by_currency,
-            "installments": {
-                "total_installments": total_installments,
-                "total_amount": total_installment_amount,
-                "total_remaining": total_remaining,
-                "by_currency": installments_by_currency
-            }
-        },
-        "job_payments": {
-            "applications_with_payment": job_applications_with_payment,
-            "applications_without_payment": job_applications_without_payment,
-            "total_submission_fees": total_submission_fees,
-            "submission_fees_by_status": submission_fees_by_status,
-            "by_currency": job_applications_by_currency
-        }
+        "training_payments": training_stats,
+        "job_payments": job_stats,
+        "global_stats": global_stats,
+        "temporal_stats": temporal_stats
     }
