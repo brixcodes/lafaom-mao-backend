@@ -109,6 +109,7 @@ async def validation_exception_handler(request: Request, exc: HTTPException):
 
 
 origins = [
+    "http://admin.lafaom-mao.org",
     "http://localhost:5500",
     "http://localhost",
     "https://vitrine-lafaom.vercel.app",
