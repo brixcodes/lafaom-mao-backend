@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Header,Query
 from src.api.auth.utils import check_permissions
 from src.api.payments.dependencies import get_payment_by_transaction
-from src.api.payments.models import PaymentStatusEnum
+from src.api.payments.models import PaymentStatusEnum, Payment
 from src.api.payments.service import PaymentService 
 from src.api.payments.schemas import  PaymentFilter, PaymentOutSuccess, PaymentPageOutSuccess, WebhookPayload
 from src.api.auth.models import User
@@ -130,7 +130,7 @@ async def cinetpay_webhook_handler(
 @router.get("/check-status/{transaction_id}",response_model=PaymentOutSuccess)
 async def get_payment_status(
     transaction_id: str,
-    payment : Annotated[User, Depends(get_payment_by_transaction)],
+    payment : Annotated[Payment, Depends(get_payment_by_transaction)],
     payment_service: PaymentService = Depends()
 ):
     if payment.status == PaymentStatusEnum.PENDING.value:
