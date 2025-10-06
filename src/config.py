@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     CINETPAY_NOTIFY_URL: str = "https://lafaom.vertex-cam.com/api/v1/payments/cinetpay/notify"
     CINETPAY_RETURN_URL: str = "https://lafaom.vertex-cam.com"
     CINETPAY_CURRENCY: str = "XAF"
-    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD"
+    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET"
     
     ## CinetPay Visa Configuration
     CINETPAY_ENABLE_VISA: bool = True

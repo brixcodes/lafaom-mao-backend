@@ -346,6 +346,11 @@ class CinetPayService:
     async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
 
         
+        # Construire les channels dynamiquement
+        channels = settings.CINETPAY_CHANNELS
+        if settings.CINETPAY_ENABLE_VISA:
+            channels += ",CREDIT_CARD,INTERNATIONAL_CARD"
+        
         payload = {
             "amount": payment_data.amount,
             "currency": payment_data.currency,
@@ -353,22 +358,14 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD",
+            "channels": channels,
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
             "meta": payment_data.meta,
             "invoice_data": payment_data.invoice_data,
             # Configuration spécifique pour activer Visa
-            "can_pay_with_visa_api": True,
-            "is_visa_secured": True,
-            # Paramètres supplémentaires pour forcer l'affichage des cartes
-            "payment_method": "CREDIT_CARD",
-            "gateway_progress": "BEGIN_PAYMENT",
-            # Paramètres spécifiques CinetPay pour les cartes bancaires
-            "alternative_amount_in_customer_country": "0",
-            "alternative_currency": None,
-            "buyer_country": "CM",
-            "funds_destination": None,
+            "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
+            "is_visa_secured": settings.CINETPAY_VISA_SECURED,
             # Champs requis pour CinetPay
             "lang": "fr",
             "cpm_version": "V4",
@@ -385,23 +382,29 @@ class CinetPayService:
         payload["customer_state"] = payment_data.customer_state or "Littoral"
         payload["customer_zip_code"] = payment_data.customer_zip_code or "065100"
         
-        # Debug: Afficher le payload pour vérifier les paramètres Visa
+        # Debug: Afficher le payload pour vérifier les paramètres
         print(f"DEBUG CinetPay Payload - Channels: {payload.get('channels')}")
         print(f"DEBUG CinetPay Payload - Visa API: {payload.get('can_pay_with_visa_api')}")
         print(f"DEBUG CinetPay Payload - Visa Secured: {payload.get('is_visa_secured')}")
-        print(f"DEBUG CinetPay Payload - Payment Method: {payload.get('payment_method')}")
+        print(f"DEBUG CinetPay Payload - Amount: {payload.get('amount')}")
+        print(f"DEBUG CinetPay Payload - Currency: {payload.get('currency')}")
+        print(f"DEBUG CinetPay Payload - Transaction ID: {payload.get('transaction_id')}")
         
         async with httpx.AsyncClient() as client:
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
             
             print(f"DEBUG CinetPay Response - Status: {response.status_code}")
             print(f"DEBUG CinetPay Response - Body: {response.json()}")
+            
             if response.status_code == 400:
-                data = response.json()
+                error_data = response.json()
+                print(f"DEBUG CinetPay Error - Code: {error_data.get('code')}")
+                print(f"DEBUG CinetPay Error - Message: {error_data.get('message')}")
+                print(f"DEBUG CinetPay Error - Description: {error_data.get('description')}")
                 return {
                     "status": "error",
-                    "code":data["code"] ,
-                    "message": data["message"] + " : " + data["description"]
+                    "code": error_data["code"],
+                    "message": error_data["message"] + " : " + error_data["description"]
                 }
                 
             response.raise_for_status()
