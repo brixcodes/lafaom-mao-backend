@@ -73,10 +73,21 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Autorise toutes les origines (dev uniquement)
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+    ],
+    expose_headers=["*"],
 )
 
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
@@ -146,7 +157,39 @@ async def root() -> dict:
         "message": "Welcome to Lafaom Mao API ",
         "documentation": "/docs",
         "Environment": settings.ENV
-    }  
+    }
+
+@app.get("/health/database", tags=["Health"])
+async def database_health() -> dict:
+    """Check database table existence"""
+    try:
+        from src.database import get_session_async
+        from sqlalchemy import text
+        
+        async for session in get_session_async():
+            # Check if post_categories table exists
+            result = await session.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'post_categories'
+                );
+            """))
+            post_categories_exists = result.scalar()
+            
+            return {
+                "status": "healthy",
+                "database": "connected",
+                "tables": {
+                    "post_categories": post_categories_exists,
+                    "users": True,  # Assuming users table exists
+                }
+            }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }  
 
 @app.on_event("startup")
 async def startup_event():

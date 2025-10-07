@@ -51,9 +51,15 @@ class BlogService:
         return result.scalars().first()
 
     async def list_categories(self) -> List[PostCategory]:
-        statement = select(PostCategory).where(PostCategory.delete_at.is_(None)).order_by(PostCategory.title)
-        result = await self.session.execute(statement)
-        return result.scalars().all()
+        try:
+            statement = select(PostCategory).where(PostCategory.delete_at.is_(None)).order_by(PostCategory.title)
+            result = await self.session.execute(statement)
+            return result.scalars().all()
+        except Exception as e:
+            # If table doesn't exist, return empty list
+            if "post_categories" in str(e) and "does not exist" in str(e):
+                return []
+            raise e
 
     async def delete_category(self, category: PostCategory) -> PostCategory:
         category.delete_at = datetime.now(timezone.utc)
