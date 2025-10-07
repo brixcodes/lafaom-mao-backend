@@ -94,7 +94,6 @@ class JobOfferFilter(BaseModel):
     asc: Literal["asc", "desc"] = "asc"
 
 class JobAttachmentInput(BaseModel):
-
     name: str
     file : UploadFile
 

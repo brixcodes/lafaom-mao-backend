@@ -249,6 +249,11 @@ async def get_job_application_route(
         )
     return {"message": "Job application fetched successfully", "data": full_application}
 
+@router.options("/job-attachments", tags=["Job Attachment"])
+async def options_job_attachments():
+    """Handle preflight requests for job attachments"""
+    return {"message": "OK"}
+
 @router.post("/job-attachments", response_model=JobAttachmentOutSuccess, tags=["Job Attachment"])
 async def create_attachment(
    
