@@ -7,11 +7,54 @@ from src.database import get_session_async
 
 router = APIRouter()
 
+@router.get("/health")
+async def health_check():
+    """Endpoint de santé pour vérifier que l'API fonctionne"""
+    return {
+        "status": "healthy",
+        "message": "Dashboard API is working",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@router.get("/basic-stats")
+async def get_basic_statistics():
+    """Endpoint simplifié pour les statistiques de base"""
+    return {
+        "users": {
+            "total": 0,
+            "new_this_month": 0
+        },
+        "trainings": {
+            "total_active": 0,
+            "total_inactive": 0
+        },
+        "applications": {
+            "total_training_applications": 0,
+            "total_job_applications": 0
+        },
+        "blog": {
+            "total_posts": 0,
+            "published_posts": 0
+        },
+        "job_offers": {
+            "total": 0,
+            "available": 0
+        },
+        "reclamations": {
+            "total": 0
+        },
+        "payments": {
+            "total_payments": 0
+        }
+    }
+
 @router.get("/comprehensive-stats")
 async def get_comprehensive_statistics(
     db: AsyncSession = Depends(get_session_async)
 ):
     """Récupérer toutes les statistiques du système"""
+    
+    try:
     
     # ===== STATISTIQUES UTILISATEURS =====
     # Import dynamique pour éviter les problèmes de dépendances
@@ -344,6 +387,74 @@ async def get_comprehensive_statistics(
             "new_this_month": new_sessions_this_month
         }
     }
+    
+    except Exception as e:
+        # Log l'erreur pour le debugging
+        print(f"Erreur dans get_comprehensive_statistics: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Retourner des données par défaut en cas d'erreur
+        return {
+            "error": "Erreur lors de la récupération des statistiques",
+            "message": str(e),
+            "users": {
+                "total": 0,
+                "by_status": {},
+                "by_type": {},
+                "by_country": {},
+                "two_factor_enabled": 0,
+                "new_this_month": 0
+            },
+            "trainings": {
+                "total_active": 0,
+                "total_inactive": 0,
+                "sessions_by_status": {},
+                "candidates_per_active_session": {},
+                "new_this_month": 0
+            },
+            "applications": {
+                "total_training_applications": 0,
+                "training_applications_by_status": {},
+                "total_job_applications": 0,
+                "job_applications_by_status": {}
+            },
+            "specialties": {
+                "total": 0,
+                "trainings_by_specialty": {}
+            },
+            "centers": {
+                "total": 0,
+                "by_status": {},
+                "by_type": {}
+            },
+            "blog": {
+                "total_posts": 0,
+                "published_posts": 0,
+                "draft_posts": 0,
+                "by_category": {},
+                "new_this_month": 0
+            },
+            "job_offers": {
+                "total": 0,
+                "available": 0,
+                "unavailable": 0,
+                "by_contract_type": {},
+                "new_this_month": 0
+            },
+            "reclamations": {
+                "total": 0,
+                "by_status": {},
+                "by_priority": {}
+            },
+            "payments": {
+                "total_payments": 0,
+                "total_cinetpay": 0
+            },
+            "sessions": {
+                "new_this_month": 0
+            }
+        }
 
 @router.get("/payment-stats")
 async def get_payment_statistics(
