@@ -33,7 +33,7 @@ class OrganizationCenter(CustomBaseModel, table=True):
     longitude: Optional[float] = Field(default=None)
     status: str = Field(default=OrganizationStatusEnum.ACTIVE, max_length=50)
     organization_type: str = Field(default=OrganizationTypeEnum.MAIN, max_length=50)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=5000)
 
 def update_updated_at_organization(mapper, connection, target):
     target.updated_at = datetime.now(timezone.utc)
