@@ -48,6 +48,37 @@ app.celery_app = celery
 
 base_url = "/api/v1"
 
+# CORS configuration
+origins = [
+    "https://lafaom.netlify.app",
+    "https://admin.lafaom-mao.org",
+    "http://admin.lafaom-mao.org",
+    "http://localhost:5500",
+    "http://localhost",
+    "https://vitrine-lafaom.vercel.app",
+    "http://localhost:4200",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:4200",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5500",
+    "https://vitrine-lafaom.vercel.app",
+    "https://www.lafaom.vertex-cam.com/",
+    "https://lafaom.vertex-cam.com",
+]
+
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Autorise toutes les origines (dev uniquement)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 app.include_router(auth_router, prefix=base_url + "/auth", tags=["Auth"])
@@ -108,25 +139,6 @@ async def validation_exception_handler(request: Request, exc: HTTPException):
         
 
 
-origins = [
-    "https://admin.lafaom-mao.org",
-    "http://admin.lafaom-mao.org",
-    "http://localhost:5500",
-    "http://localhost",
-    "https://vitrine-lafaom.vercel.app",
-    "http://localhost:4200",
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:4200",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080",
-    "http://127.0.0.1:5500",
-    "https://vitrine-lafaom.vercel.app",
-    "https://www.lafaom.vertex-cam.com/",
-    "https://lafaom.vertex-cam.com",
-]
-
 @app.get("/", tags=["Root"])
 async def root() -> dict:
     
@@ -134,17 +146,7 @@ async def root() -> dict:
         "message": "Welcome to Lafaom Mao API ",
         "documentation": "/docs",
         "Environment": settings.ENV
-    }
-
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,  # Autorise toutes les origines (dev uniquement)
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)  
+    }  
 
 @app.on_event("startup")
 async def startup_event():
