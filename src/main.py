@@ -50,6 +50,7 @@ base_url = "/api/v1"
 
 # CORS configuration
 origins = [
+    "https://lafaom-mao.org",
     "https://lafaom.netlify.app",
     "https://admin.lafaom-mao.org",
     "http://admin.lafaom-mao.org",
