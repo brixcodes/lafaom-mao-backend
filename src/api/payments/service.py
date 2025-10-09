@@ -344,6 +344,44 @@ class CinetPayService:
 
 
     async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
+        
+        # Validation des paramètres CinetPay
+        print(f"=== CINETPAY CONFIGURATION CHECK ===")
+        print(f"API Key: {settings.CINETPAY_API_KEY}")
+        print(f"Site ID: {settings.CINETPAY_SITE_ID}")
+        print(f"Notify URL: {settings.CINETPAY_NOTIFY_URL}")
+        print(f"Return URL: {settings.CINETPAY_RETURN_URL}")
+        print(f"Payment Amount: {payment_data.amount}")
+        print(f"Payment Currency: {payment_data.currency}")
+        print(f"Transaction ID: {payment_data.transaction_id}")
+        
+        # Vérification des paramètres requis
+        if not settings.CINETPAY_API_KEY or settings.CINETPAY_API_KEY == "your_cinetpay_api_key_here":
+            error_msg = "CinetPay API Key is not configured or is invalid"
+            print(f"ERROR: {error_msg}")
+            return {
+                "status": "error",
+                "code": "INVALID_API_KEY",
+                "message": error_msg
+            }
+        
+        if not settings.CINETPAY_SITE_ID or settings.CINETPAY_SITE_ID == "your_cinetpay_site_id_here":
+            error_msg = "CinetPay Site ID is not configured or is invalid"
+            print(f"ERROR: {error_msg}")
+            return {
+                "status": "error",
+                "code": "INVALID_SITE_ID",
+                "message": error_msg
+            }
+        
+        if payment_data.amount <= 0:
+            error_msg = "Payment amount must be greater than 0"
+            print(f"ERROR: {error_msg}")
+            return {
+                "status": "error",
+                "code": "INVALID_AMOUNT",
+                "message": error_msg
+            }
 
         payload = {
             "amount": payment_data.amount,
@@ -380,32 +418,71 @@ class CinetPayService:
             
         payload["customer_zip_code"] = "065100"
         
-        async with httpx.AsyncClient() as client:
-            print(f"CinetPay API - URL: https://api-checkout.cinetpay.com/v2/payment")
-            print(f"CinetPay API - API Key: {settings.CINETPAY_API_KEY}")
-            print(f"CinetPay API - Site ID: {settings.CINETPAY_SITE_ID}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            print(f"=== CINETPAY API REQUEST ===")
+            print(f"URL: https://api-checkout.cinetpay.com/v2/payment")
+            print(f"Payload: {json.dumps(payload, indent=2)}")
             
-            response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
+            try:
+                response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
+            except httpx.TimeoutException as timeout_error:
+                print(f"CinetPay API Timeout: {timeout_error}")
+                return {
+                    "status": "error",
+                    "code": "TIMEOUT",
+                    "message": f"CinetPay API timeout: {str(timeout_error)}"
+                }
+            except httpx.ConnectError as connect_error:
+                print(f"CinetPay API Connection Error: {connect_error}")
+                return {
+                    "status": "error",
+                    "code": "CONNECTION_ERROR",
+                    "message": f"CinetPay API connection failed: {str(connect_error)}"
+                }
+            except Exception as http_error:
+                print(f"CinetPay API HTTP Error: {http_error}")
+                return {
+                    "status": "error",
+                    "code": "HTTP_ERROR",
+                    "message": f"CinetPay API error: {str(http_error)}"
+                }
             
-            print(f"CinetPay Response - Status: {response.status_code}")
-            print(f"CinetPay Response - Body: {response.json()}")
-            print(f"CinetPay Request - Payload: {payload}")
+            print(f"=== CINETPAY API RESPONSE ===")
+            print(f"Status Code: {response.status_code}")
+            print(f"Headers: {dict(response.headers)}")
+            
+            try:
+                response_data = response.json()
+                print(f"Response Body: {json.dumps(response_data, indent=2)}")
+            except Exception as json_error:
+                print(f"Failed to parse JSON response: {json_error}")
+                print(f"Raw response text: {response.text}")
+                return {
+                    "status": "error",
+                    "code": "INVALID_JSON_RESPONSE",
+                    "message": f"Invalid JSON response from CinetPay: {response.text}"
+                }
             
             if response.status_code == 400:
-                data = response.json()
-                error_message = f"CinetPay Error: {data.get('message', 'Unknown error')} - {data.get('description', 'No description')}"
+                error_message = f"CinetPay Error: {response_data.get('message', 'Unknown error')} - {response_data.get('description', 'No description')}"
                 print(f"CinetPay Error Details: {error_message}")
                 return {
                     "status": "error",
-                    "code": data.get("code", "UNKNOWN_ERROR"),
+                    "code": response_data.get("code", "UNKNOWN_ERROR"),
                     "message": error_message
                 }
-                
-            response.raise_for_status()
-            data = response.json()
-
-            if data["code"] == "201":
-                payment_link = data["data"]["payment_url"]
+            
+            if response.status_code != 200:
+                error_message = f"HTTP Error {response.status_code}: {response_data.get('message', 'Unknown error')}"
+                print(f"HTTP Error: {error_message}")
+                return {
+                    "status": "error",
+                    "code": f"HTTP_{response.status_code}",
+                    "message": error_message
+                }
+            
+            if response_data.get("code") == "201":
+                payment_link = response_data["data"]["payment_url"]
                 
                 db_payment = CinetPayPayment(
                     
@@ -414,9 +491,9 @@ class CinetPayService:
                     currency=payment_data.currency,
                     status="PENDING",
                     payment_link=payment_link,
-                    payment_url=data["data"]["payment_url"],
-                    payment_token=data["data"]["payment_token"],
-                    api_response_id=data["api_response_id"]
+                    payment_url=response_data["data"]["payment_url"],
+                    payment_token=response_data["data"]["payment_token"],
+                    api_response_id=response_data["api_response_id"]
                 )
 
 
@@ -428,8 +505,8 @@ class CinetPayService:
                     "data": db_payment
                 }
             else:
-                print(data["message"])
-                raise Exception(data["message"])
+                print(response_data["message"])
+                raise Exception(response_data["message"])
 
     async def initiate_cinetpay_swallow_payment(self, payment_data: CinetPayInit):
         db_payment = CinetPayPayment(
