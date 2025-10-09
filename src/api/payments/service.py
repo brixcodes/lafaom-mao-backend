@@ -449,24 +449,8 @@ class CinetPayService:
         # Validation des montants pour les paiements par carte - DÉSACTIVÉE
         # Les limites de montant sont supprimées pour permettre tous les montants
 
-        # Déterminer les canaux de paiement disponibles
-        available_channels = []
-        
-        # Canaux de base (mobile money, wallet)
-        if "MOBILE_MONEY" in settings.CINETPAY_CHANNELS:
-            available_channels.append("MOBILE_MONEY")
-        if "WALLET" in settings.CINETPAY_CHANNELS:
-            available_channels.append("WALLET")
-            
-        # Canaux de paiement par carte (utiliser les canaux autorisés par CinetPay)
-        if settings.CINETPAY_ENABLE_CARD_PAYMENTS:
-            if settings.CINETPAY_ENABLE_VISA:
-                available_channels.append("CREDIT_CARD")
-            if settings.CINETPAY_ENABLE_MASTERCARD:
-                available_channels.append("INTERNATIONAL_CARD")
-        
-        # Utiliser "ALL" si aucun canal spécifique n'est configuré
-        channels_param = ",".join(available_channels) if available_channels else "ALL"
+        # Utiliser "ALL" pour permettre tous les canaux de paiement
+        channels_param = "ALL"
         
         print(f"CinetPay Channels: {channels_param}")
         
