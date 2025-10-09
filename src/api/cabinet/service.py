@@ -62,9 +62,32 @@ class CabinetApplicationService:
             payment_result = await self._submit_cabinet_application(application)
             
             print("Creating response...")
-            application_out = CabinetApplicationOut.model_validate(application)
-            application_out.payment_url = payment_result.get("payment_url")
-            application_out.payment_reference = payment_result.get("payment_reference")
+            # Créer manuellement l'objet de réponse
+            application_out = CabinetApplicationOut(
+                id=str(application.id),
+                company_name=application.company_name,
+                contact_email=application.contact_email,
+                contact_phone=application.contact_phone,
+                address=application.address,
+                registration_number=application.registration_number,
+                experience_years=application.experience_years,
+                qualifications=application.qualifications,
+                technical_proposal=application.technical_proposal,
+                financial_proposal=application.financial_proposal,
+                references=application.references,
+                status=application.status,
+                payment_status=application.payment_status,
+                payment_reference=application.payment_reference,
+                payment_amount=application.payment_amount,
+                payment_currency=application.payment_currency,
+                payment_date=application.payment_date,
+                account_created=application.account_created,
+                credentials_sent=application.credentials_sent,
+                created_at=application.created_at,
+                updated_at=application.updated_at
+            )
+            application_out.payment_url = payment_result.get("payment_link")
+            application_out.payment_reference = payment_result.get("transaction_id")
             
             return application_out
             
@@ -82,7 +105,7 @@ class CabinetApplicationService:
         application = result.scalar_one_or_none()
         
         if application:
-            return CabinetApplicationOut.model_validate(application)
+            return CabinetApplicationOut.model_validate(application.model_dump())
         return None
 
     async def get_application_by_email(self, email: str) -> Optional[CabinetApplicationOut]:
@@ -93,7 +116,7 @@ class CabinetApplicationService:
         application = result.scalar_one_or_none()
         
         if application:
-            return CabinetApplicationOut.model_validate(application)
+            return CabinetApplicationOut.model_validate(application.model_dump())
         return None
 
     async def get_payment_status(self, application_id: str) -> dict:
@@ -142,7 +165,7 @@ class CabinetApplicationService:
         await self.session.commit()
         await self.session.refresh(application)
         
-        return CabinetApplicationOut.model_validate(application)
+        return CabinetApplicationOut.model_validate(application.model_dump())
 
     async def _submit_cabinet_application(self, application: CabinetApplication) -> dict:
         try:
@@ -154,6 +177,15 @@ class CabinetApplicationService:
                 product_currency=application.payment_currency,
                 description=f"Frais de candidature cabinet LAFAOM - {application.company_name}",
                 payment_provider="CINETPAY",
+                customer_name=application.company_name,
+                customer_surname="Cabinet",
+                customer_email=application.contact_email,
+                customer_phone_number=application.contact_phone,
+                customer_address=application.address,
+                customer_city="Dakar",  # Ville par défaut pour le Sénégal
+                customer_country="SN",  # Code pays Sénégal
+                customer_state="SN",
+                customer_zip_code="00000"
             )
             print("Initiating payment with PaymentService...")
             payment_result = await self.payment_service.initiate_payment(payment_input)
@@ -386,7 +418,20 @@ class CabinetApplicationService:
         result = await self.session.execute(query)
         applications = result.scalars().all()
         
-        return [CabinetApplicationOut.from_orm(app) for app in applications]
+        return [CabinetApplicationOut.model_validate(app.model_dump()) for app in applications]
+
+    async def get_paid_applications(self, skip: int = 0, limit: int = 100) -> List[CabinetApplicationOut]:
+        """Récupérer les candidatures qui ont payé les frais"""
+        query = select(CabinetApplication).where(
+            CabinetApplication.payment_status == PaymentStatus.PAID
+        )
+        
+        query = query.offset(skip).limit(limit).order_by(CabinetApplication.payment_date.desc())
+        
+        result = await self.session.execute(query)
+        applications = result.scalars().all()
+        
+        return [CabinetApplicationOut.model_validate(app.model_dump()) for app in applications]
 
 class ApplicationFeeService:
     def __init__(self, session: AsyncSession):
@@ -441,4 +486,4 @@ class ApplicationFeeService:
         )
         fees = result.scalars().all()
         
-        return [ApplicationFeeOut.from_orm(fee) for fee in fees]
+        return [ApplicationFeeOut.model_validate(fee) for fee in fees]

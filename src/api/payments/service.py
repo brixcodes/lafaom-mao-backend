@@ -178,7 +178,7 @@ class PaymentService:
     async def initiate_payment(self, payment_data: PaymentInitInput,is_swallow: bool = False):
         
         if payment_data.payment_provider == "CINETPAY":
-            payment_currency = "XAF"
+            payment_currency = "XAF"  # XAF pour le compte CinetPay
         else :
             payment_currency = payment_data.product_currency
 
@@ -449,8 +449,8 @@ class CinetPayService:
         # Validation des montants pour les paiements par carte - DÉSACTIVÉE
         # Les limites de montant sont supprimées pour permettre tous les montants
 
-        # Utiliser "ALL" pour permettre tous les canaux de paiement
-        channels_param = "ALL"
+        # Utiliser les canaux de paiement configurés pour inclure les cartes bancaires
+        channels_param = settings.CINETPAY_CHANNELS
         
         print(f"CinetPay Channels: {channels_param}")
         

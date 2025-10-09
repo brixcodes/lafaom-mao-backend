@@ -148,6 +148,18 @@ async def list_cabinet_applications(
     applications = await service.list_applications(skip=skip, limit=limit, status=status_enum)
     return applications
 
+@router.get("/paid", response_model=List[CabinetApplicationOut])
+async def get_paid_cabinet_applications(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session_async)
+):
+    """Récupérer les cabinets qui ont payé les frais de candidature"""
+    service = CabinetApplicationService(session)
+    applications = await service.get_paid_applications(skip=skip, limit=limit)
+    return applications
+
 @router.get("/stats/overview", response_model=CabinetApplicationStats)
 async def get_application_stats(
     current_user: User = Depends(get_current_active_user),
