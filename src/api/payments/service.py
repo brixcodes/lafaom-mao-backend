@@ -108,25 +108,72 @@ class PaymentService:
         cache_key = f"currency:{from_currency}:{','.join(to_currencies) if to_currencies else 'ALL'}"
 
         # Check cache
-        cached = await get_from_redis(cache_key)
-        if cached:
-            return json.loads(cached)
-        
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "apikey": settings.CURRENCY_API_KEY
+        try:
+            cached = await get_from_redis(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception as e:
+            print(f"Redis cache error: {e}")
+
+        # Si pas d'API key configurée, utiliser des taux par défaut
+        if not settings.CURRENCY_API_KEY or settings.CURRENCY_API_KEY == "your_currency_api_key_here":
+            print("No currency API key configured, using default rates")
+            default_rates = {
+                "USDXAF": 600.0,
+                "EURXAF": 675.0,
+                "XAFUSD": 0.0017,
+                "XAFEUR": 0.0015,
             }
-            symbols = ",".join(to_currencies) if to_currencies else None
-            params = {"source": from_currency}
-            if symbols:
-                params["currencies"] = symbols
-            #print(params,headers,settings.CURRENCY_API_URL)
-            response = await client.get(f"{settings.CURRENCY_API_URL}", headers=headers, params=params)
-            data = response.json()
-            rates = data['quotes']
-            #print(data,params)
-        await set_to_redis(cache_key, json.dumps(rates), ex=14400)
-        return rates
+            rate_key = f"{from_currency}{to_currencies[0] if to_currencies else 'XAF'}"
+            return {rate_key: default_rates.get(rate_key, 1.0)}
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                headers = {
+                    "apikey": settings.CURRENCY_API_KEY
+                }
+                symbols = ",".join(to_currencies) if to_currencies else None
+                params = {"source": from_currency}
+                if symbols:
+                    params["currencies"] = symbols
+                
+                print(f"Currency API Request - URL: {settings.CURRENCY_API_URL}")
+                print(f"Currency API Request - Params: {params}")
+                
+                response = await client.get(f"{settings.CURRENCY_API_URL}", headers=headers, params=params)
+                
+                if response.status_code != 200:
+                    print(f"Currency API Error: {response.status_code} - {response.text}")
+                    raise Exception(f"Currency API returned {response.status_code}")
+                
+                data = response.json()
+                print(f"Currency API Response: {data}")
+                
+                if 'quotes' not in data:
+                    print(f"Currency API Error: No 'quotes' in response: {data}")
+                    raise Exception("Invalid currency API response format")
+                
+                rates = data['quotes']
+                
+                # Cache the rates
+                try:
+                    await set_to_redis(cache_key, json.dumps(rates), ex=14400)
+                except Exception as e:
+                    print(f"Redis cache set error: {e}")
+                
+                return rates
+                
+        except Exception as e:
+            print(f"Currency API Error: {e}")
+            # Fallback to default rates
+            default_rates = {
+                "USDXAF": 600.0,
+                "EURXAF": 650.0,
+                "XAFUSD": 0.0017,
+                "XAFEUR": 0.0015,
+            }
+            rate_key = f"{from_currency}{to_currencies[0] if to_currencies else 'XAF'}"
+            return {rate_key: default_rates.get(rate_key, 1.0)}
 
     async def initiate_payment(self, payment_data: PaymentInitInput,is_swallow: bool = False):
         
@@ -135,16 +182,32 @@ class PaymentService:
         else :
             payment_currency = payment_data.product_currency
 
-        quota =  await self.get_currency_rates(payment_data.product_currency, [payment_currency])
-        product_currency_to_payment_currency_rate = quota[f"{payment_data.product_currency}{payment_currency}"]  
+        try:
+            quota = await self.get_currency_rates(payment_data.product_currency, [payment_currency])
+            product_currency_to_payment_currency_rate = quota[f"{payment_data.product_currency}{payment_currency}"]
+        except Exception as e:
+            print(f"Currency conversion error: {e}")
+            # Utiliser un taux par défaut si la conversion échoue
+            if payment_currency == "XAF" and payment_data.product_currency == "EUR":
+                product_currency_to_payment_currency_rate = 650.0  # 1 EUR = 650 XAF
+            elif payment_currency == "XAF" and payment_data.product_currency == "USD":
+                product_currency_to_payment_currency_rate = 600.0  # 1 USD = 600 XAF
+            else:
+                product_currency_to_payment_currency_rate = 1.0  # Pas de conversion
         
         print(f"Currency Conversion - Original Amount: {payment_data.amount} {payment_data.product_currency}")
         print(f"Currency Conversion - Rate: {product_currency_to_payment_currency_rate}")
         print(f"Currency Conversion - Converted Amount: {payment_data.amount * product_currency_to_payment_currency_rate} {payment_currency}")
         
-        quota =  await self.get_currency_rates("USD",[payment_currency,payment_data.product_currency])
-        usd_to_payment_currency_rate = quota[f"USD{payment_currency}"]
-        usd_to_product_currency_rate = quota[f"USD{payment_data.product_currency}"]
+        try:
+            quota = await self.get_currency_rates("USD", [payment_currency, payment_data.product_currency])
+            usd_to_payment_currency_rate = quota[f"USD{payment_currency}"]
+            usd_to_product_currency_rate = quota[f"USD{payment_data.product_currency}"]
+        except Exception as e:
+            print(f"USD currency conversion error: {e}")
+            # Utiliser des taux par défaut
+            usd_to_payment_currency_rate = 600.0 if payment_currency == "XAF" else 1.0
+            usd_to_product_currency_rate = 1.0 if payment_data.product_currency == "USD" else 0.0017
         
 
         payment = Payment(
