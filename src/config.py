@@ -104,11 +104,22 @@ class Settings(BaseSettings):
     CINETPAY_NOTIFY_URL: str = "https://lafaom.vertex-cam.com/api/v1/payments/cinetpay/notify"
     CINETPAY_RETURN_URL: str = "https://lafaom.vertex-cam.com"
     CINETPAY_CURRENCY: str = "XAF"
-    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET"
     
-    ## CinetPay Visa Configuration
+    ## CinetPay Payment Channels Configuration
+    # Canaux de paiement disponibles : MOBILE_MONEY, WALLET, CARD, VISA, MASTERCARD
+    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET,CARD,VISA,MASTERCARD"
+    
+    ## CinetPay Card Payments Configuration
+    CINETPAY_ENABLE_CARD_PAYMENTS: bool = True
     CINETPAY_ENABLE_VISA: bool = True
+    CINETPAY_ENABLE_MASTERCARD: bool = True
     CINETPAY_VISA_SECURED: bool = True
+    CINETPAY_MASTERCARD_SECURED: bool = True
+    
+    ## CinetPay Card Payment Settings
+    CINETPAY_CARD_MIN_AMOUNT: int = 100  # Montant minimum pour les paiements par carte (en centimes)
+    CINETPAY_CARD_MAX_AMOUNT: int = 1000000  # Montant maximum pour les paiements par carte (en centimes)
+    CINETPAY_CARD_CURRENCY: str = "XAF"  # Devise pour les paiements par carte
     
     CURRENCY_API_KEY : str | None = None
     CURRENCY_API_URL: str | None = None

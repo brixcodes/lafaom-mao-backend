@@ -382,7 +382,52 @@ class CinetPayService:
                 "code": "INVALID_AMOUNT",
                 "message": error_msg
             }
+        
+        # Validation des montants pour les paiements par carte
+        if settings.CINETPAY_ENABLE_CARD_PAYMENTS:
+            amount_in_cents = int(payment_data.amount * 100)  # Convertir en centimes
+            
+            if amount_in_cents < settings.CINETPAY_CARD_MIN_AMOUNT:
+                error_msg = f"Payment amount too low for card payments. Minimum: {settings.CINETPAY_CARD_MIN_AMOUNT/100} {payment_data.currency}"
+                print(f"ERROR: {error_msg}")
+                return {
+                    "status": "error",
+                    "code": "AMOUNT_TOO_LOW",
+                    "message": error_msg
+                }
+            
+            if amount_in_cents > settings.CINETPAY_CARD_MAX_AMOUNT:
+                error_msg = f"Payment amount too high for card payments. Maximum: {settings.CINETPAY_CARD_MAX_AMOUNT/100} {payment_data.currency}"
+                print(f"ERROR: {error_msg}")
+                return {
+                    "status": "error",
+                    "code": "AMOUNT_TOO_HIGH",
+                    "message": error_msg
+                }
 
+        # Déterminer les canaux de paiement disponibles
+        available_channels = []
+        
+        # Canaux de base (mobile money, wallet)
+        if "MOBILE_MONEY" in settings.CINETPAY_CHANNELS:
+            available_channels.append("MOBILE_MONEY")
+        if "WALLET" in settings.CINETPAY_CHANNELS:
+            available_channels.append("WALLET")
+            
+        # Canaux de paiement par carte
+        if settings.CINETPAY_ENABLE_CARD_PAYMENTS:
+            if "CARD" in settings.CINETPAY_CHANNELS:
+                available_channels.append("CARD")
+            if settings.CINETPAY_ENABLE_VISA and "VISA" in settings.CINETPAY_CHANNELS:
+                available_channels.append("VISA")
+            if settings.CINETPAY_ENABLE_MASTERCARD and "MASTERCARD" in settings.CINETPAY_CHANNELS:
+                available_channels.append("MASTERCARD")
+        
+        # Utiliser "ALL" si aucun canal spécifique n'est configuré
+        channels_param = ",".join(available_channels) if available_channels else "ALL"
+        
+        print(f"CinetPay Channels: {channels_param}")
+        
         payload = {
             "amount": payment_data.amount,
             "currency": payment_data.currency,
@@ -390,10 +435,10 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": "ALL",
+            "channels": channels_param,
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
-            "meta":payment_data.meta,
+            "meta": payment_data.meta,
             "invoice_data": payment_data.invoice_data,
         }
         
