@@ -215,4 +215,41 @@ class JobApplicationOTPNotification(NotificationBase) :
                     "candidate_name":self.candidate_name
                 } 
         } 
+
+class CabinetCredentialsNotification(NotificationBase):
+    subject: str = "Identifiants de connexion - Cabinet LAFAOM"
+    email_template: str = "cabinet_credentials.html"
+    username: str = ""
+    temporary_password: str = ""
+    login_url: str = ""
+    company_name: str = ""
+    
+    def email_data(self) -> dict:
+        return {
+            "to_email": self.email,
+            "subject": self.subject,
+            "template_name": self.email_template,
+            "lang": self.lang,
+            "context": {
+                "username": self.username,
+                "temporary_password": self.temporary_password,
+                "login_url": self.login_url,
+                "company_name": self.company_name
+            }
+        }
+
+class NotificationService:
+    def __init__(self):
+        pass
+    
+    async def send_cabinet_credentials_email(self, credentials):
+        """Envoyer les identifiants de connexion au cabinet"""
+        notification = CabinetCredentialsNotification(
+            email=credentials.email,
+            username=credentials.username,
+            temporary_password=credentials.temporary_password,
+            login_url=credentials.login_url,
+            company_name=credentials.company_name if hasattr(credentials, 'company_name') else "Cabinet"
+        )
+        return notification.send_notification()
         

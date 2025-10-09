@@ -9,8 +9,7 @@ from sqlalchemy import func, or_
 from sqlmodel import select ,Session
 from src.api.job_offers.models import JobApplication
 from src.api.job_offers.service import JobOfferService
-# Importation différée pour éviter l'importation circulaire
-# from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
+from src.api.training.models import StudentApplication, TrainingFeeInstallmentPayment
 from src.config import settings
 from src.api.payments.models import CinetPayPayment, Payment, PaymentStatusEnum
 from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInput
@@ -139,6 +138,10 @@ class PaymentService:
         quota =  await self.get_currency_rates(payment_data.product_currency, [payment_currency])
         product_currency_to_payment_currency_rate = quota[f"{payment_data.product_currency}{payment_currency}"]  
         
+        print(f"Currency Conversion - Original Amount: {payment_data.amount} {payment_data.product_currency}")
+        print(f"Currency Conversion - Rate: {product_currency_to_payment_currency_rate}")
+        print(f"Currency Conversion - Converted Amount: {payment_data.amount * product_currency_to_payment_currency_rate} {payment_currency}")
+        
         quota =  await self.get_currency_rates("USD",[payment_currency,payment_data.product_currency])
         usd_to_payment_currency_rate = quota[f"USD{payment_currency}"]
         usd_to_product_currency_rate = quota[f"USD{payment_data.product_currency}"]
@@ -157,9 +160,12 @@ class PaymentService:
             payable_type=payment_data.payable.__class__.__name__
         )
         
+        final_amount = PaymentService.round_up_to_nearest_5(payment_data.amount * product_currency_to_payment_currency_rate)
+        print(f"CinetPay Amount - Final Amount: {final_amount} {payment_currency}")
+        
         cinetpay_data = CinetPayInit(
             transaction_id=payment.transaction_id,
-            amount= PaymentService.round_up_to_nearest_5(payment_data.amount * product_currency_to_payment_currency_rate),
+            amount= final_amount,
             currency=payment_currency,
             description=payment_data.description,
             meta=f"{payment_data.payable.__class__.__name__}-{payment_data.payable.id}",
@@ -257,8 +263,6 @@ class PaymentService:
                         job_offer = await job_application_service.update_job_application_payment(payment_id=int(payment.id),application_id=payment.payable_id)
                     
                     elif payment.payable_type == "StudentApplication":
-                        # Importation différée pour éviter l'importation circulaire
-                        from src.api.training.models import StudentApplication
                         statement = select(StudentApplication).where(StudentApplication.id == payment.payable_id)
                         result = await self.session.execute(statement)
                         student_application = result.scalars().one()
@@ -312,16 +316,12 @@ class PaymentService:
                         session.refresh(job_application)
                     
                     elif payment.payable_type == "StudentApplication":
-                        # Importation différée pour éviter l'importation circulaire
-                        from src.api.training.models import StudentApplication
                         statement = select(StudentApplication).where(StudentApplication.id == int(payment.payable_id))
                         student_application = session.exec(statement).first()
                         student_application.payment_id = payment.id
                         session.commit()
                         
                     elif payment.payable_type == "TrainingFeeInstallmentPayment" :
-                        # Importation différée pour éviter l'importation circulaire
-                        from src.api.training.models import TrainingFeeInstallmentPayment
                         training_fee_installment_payment_statement = (
                             select(TrainingFeeInstallmentPayment).where(TrainingFeeInstallmentPayment.id == int(payment.payable_id))
                             )
@@ -345,12 +345,6 @@ class CinetPayService:
 
     async def initiate_cinetpay_payment(self, payment_data: CinetPayInit):
 
-        
-        # Construire les channels dynamiquement
-        channels = settings.CINETPAY_CHANNELS
-        if settings.CINETPAY_ENABLE_VISA:
-            channels += ",CREDIT_CARD,INTERNATIONAL_CARD"
-        
         payload = {
             "amount": payment_data.amount,
             "currency": payment_data.currency,
@@ -358,53 +352,53 @@ class CinetPayService:
             "apikey": settings.CINETPAY_API_KEY,
             "site_id": settings.CINETPAY_SITE_ID,
             "transaction_id": payment_data.transaction_id,
-            "channels": channels,
+            "channels": "ALL",
             "return_url": settings.CINETPAY_RETURN_URL,
             "notify_url": settings.CINETPAY_NOTIFY_URL,
-            "meta": payment_data.meta,
+            "meta":payment_data.meta,
             "invoice_data": payment_data.invoice_data,
-            # Configuration spécifique pour activer Visa
-            "can_pay_with_visa_api": settings.CINETPAY_ENABLE_VISA,
-            "is_visa_secured": settings.CINETPAY_VISA_SECURED,
-            # Champs requis pour CinetPay
-            "lang": "fr",
-            "cpm_version": "V4",
         }
         
-        # Informations client obligatoires pour CinetPay
-        payload["customer_name"] = payment_data.customer_name or "Client"
-        payload["customer_surname"] = payment_data.customer_surname or "LAFAOM"
-        payload["customer_email"] = payment_data.customer_email or "client@lafaom.com"
-        payload["customer_phone_number"] = payment_data.customer_phone_number or "237000000000"
-        payload["customer_address"] = payment_data.customer_address or "Douala, Cameroun"
-        payload["customer_city"] = payment_data.customer_city or "Douala"
-        payload["customer_country"] = payment_data.customer_country or "CM"
-        payload["customer_state"] = payment_data.customer_state or "Littoral"
-        payload["customer_zip_code"] = payment_data.customer_zip_code or "065100"
-        
-        # Debug: Afficher le payload pour vérifier les paramètres
-        print(f"DEBUG CinetPay Payload - Channels: {payload.get('channels')}")
-        print(f"DEBUG CinetPay Payload - Visa API: {payload.get('can_pay_with_visa_api')}")
-        print(f"DEBUG CinetPay Payload - Visa Secured: {payload.get('is_visa_secured')}")
-        print(f"DEBUG CinetPay Payload - Amount: {payload.get('amount')}")
-        print(f"DEBUG CinetPay Payload - Currency: {payload.get('currency')}")
-        print(f"DEBUG CinetPay Payload - Transaction ID: {payload.get('transaction_id')}")
+        if payment_data.customer_name:
+            payload["customer_name"] = payment_data.customer_name
+        if payment_data.customer_surname:
+            payload["customer_surname"] = payment_data.customer_surname
+        if payment_data.customer_email:
+            payload["customer_email"] = payment_data.customer_email
+        if payment_data.customer_phone_number:
+            payload["customer_phone_number"] = payment_data.customer_phone_number
+        if payment_data.customer_address:
+            payload["customer_address"] = payment_data.customer_address
+        if payment_data.customer_city:
+            payload["customer_city"] = payment_data.customer_city
+        if payment_data.customer_country:
+            payload["customer_country"] = payment_data.customer_country
+        if payment_data.customer_state:
+            payload["customer_state"] = payment_data.customer_state
+        if payment_data.customer_zip_code:
+            payload["customer_zip_code"] = payment_data.customer_zip_code
+            
+        payload["customer_zip_code"] = "065100"
         
         async with httpx.AsyncClient() as client:
+            print(f"CinetPay API - URL: https://api-checkout.cinetpay.com/v2/payment")
+            print(f"CinetPay API - API Key: {settings.CINETPAY_API_KEY}")
+            print(f"CinetPay API - Site ID: {settings.CINETPAY_SITE_ID}")
+            
             response = await client.post("https://api-checkout.cinetpay.com/v2/payment", json=payload)
             
-            print(f"DEBUG CinetPay Response - Status: {response.status_code}")
-            print(f"DEBUG CinetPay Response - Body: {response.json()}")
+            print(f"CinetPay Response - Status: {response.status_code}")
+            print(f"CinetPay Response - Body: {response.json()}")
+            print(f"CinetPay Request - Payload: {payload}")
             
             if response.status_code == 400:
-                error_data = response.json()
-                print(f"DEBUG CinetPay Error - Code: {error_data.get('code')}")
-                print(f"DEBUG CinetPay Error - Message: {error_data.get('message')}")
-                print(f"DEBUG CinetPay Error - Description: {error_data.get('description')}")
+                data = response.json()
+                error_message = f"CinetPay Error: {data.get('message', 'Unknown error')} - {data.get('description', 'No description')}"
+                print(f"CinetPay Error Details: {error_message}")
                 return {
                     "status": "error",
-                    "code": error_data["code"],
-                    "message": error_data["message"] + " : " + error_data["description"]
+                    "code": data.get("code", "UNKNOWN_ERROR"),
+                    "message": error_message
                 }
                 
             response.raise_for_status()
