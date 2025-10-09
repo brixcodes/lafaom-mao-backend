@@ -62,7 +62,12 @@ class CabinetApplicationService:
             payment_result = await self._submit_cabinet_application(application)
             
             print("Creating response...")
-            # Créer manuellement l'objet de réponse
+            # Debug: log payment result
+            print(f"Payment result: {payment_result}")
+            print(f"Payment link: {payment_result.get('payment_link')}")
+            print(f"Transaction ID: {payment_result.get('transaction_id')}")
+            
+            # Créer manuellement l'objet de réponse avec payment_url
             application_out = CabinetApplicationOut(
                 id=str(application.id),
                 company_name=application.company_name,
@@ -77,17 +82,16 @@ class CabinetApplicationService:
                 references=application.references,
                 status=application.status,
                 payment_status=application.payment_status,
-                payment_reference=application.payment_reference,
+                payment_reference=payment_result.get("transaction_id"),
                 payment_amount=application.payment_amount,
                 payment_currency=application.payment_currency,
                 payment_date=application.payment_date,
                 account_created=application.account_created,
                 credentials_sent=application.credentials_sent,
                 created_at=application.created_at,
-                updated_at=application.updated_at
+                updated_at=application.updated_at,
+                payment_url=payment_result.get("payment_link")
             )
-            application_out.payment_url = payment_result.get("payment_link")
-            application_out.payment_reference = payment_result.get("transaction_id")
             
             return application_out
             
@@ -432,6 +436,96 @@ class CabinetApplicationService:
         applications = result.scalars().all()
         
         return [CabinetApplicationOut.model_validate(app.model_dump()) for app in applications]
+
+    async def get_my_applications(self, user_email: str, skip: int = 0, limit: int = 100) -> List[CabinetApplicationOut]:
+        """Récupérer les candidatures de l'utilisateur connecté"""
+        query = select(CabinetApplication).where(
+            CabinetApplication.contact_email == user_email
+        )
+        
+        query = query.offset(skip).limit(limit).order_by(CabinetApplication.created_at.desc())
+        
+        result = await self.session.execute(query)
+        applications = result.scalars().all()
+        
+        return [CabinetApplicationOut.model_validate(app.model_dump()) for app in applications]
+
+    async def approve_application(self, application_id: str) -> CabinetApplicationOut:
+        """Approuver une candidature de cabinet"""
+        # Récupérer la candidature
+        result = await self.session.execute(
+            select(CabinetApplication).where(CabinetApplication.id == application_id)
+        )
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise ValueError("Candidature non trouvée")
+        
+        if application.status != CabinetApplicationStatus.PENDING:
+            raise ValueError("Seules les candidatures en attente peuvent être approuvées")
+        
+        # Mettre à jour le statut
+        application.status = CabinetApplicationStatus.APPROVED
+        
+        # Créer un compte utilisateur pour le cabinet
+        try:
+            user_data = {
+                "email": application.contact_email,
+                "first_name": application.company_name,
+                "last_name": "",
+                "phone_number": application.contact_phone,
+                "is_active": True,
+                "is_verified": True
+            }
+            
+            # Générer un mot de passe temporaire
+            import secrets
+            import string
+            password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+            
+            # Créer l'utilisateur
+            user = await self.user_service.create_user_with_password(user_data, password)
+            application.user_id = user.id
+            application.account_created = True
+            
+            # Envoyer les identifiants par email
+            await self._send_credentials_email(application, user.email, password)
+            application.credentials_sent = True
+            
+        except Exception as e:
+            print(f"Erreur lors de la création du compte utilisateur: {e}")
+            # Continuer même si la création du compte échoue
+        
+        await self.session.commit()
+        await self.session.refresh(application)
+        
+        return CabinetApplicationOut.model_validate(application.model_dump())
+
+    async def reject_application(self, application_id: str, reason: Optional[str] = None) -> CabinetApplicationOut:
+        """Rejeter une candidature de cabinet"""
+        # Récupérer la candidature
+        result = await self.session.execute(
+            select(CabinetApplication).where(CabinetApplication.id == application_id)
+        )
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise ValueError("Candidature non trouvée")
+        
+        if application.status != CabinetApplicationStatus.PENDING:
+            raise ValueError("Seules les candidatures en attente peuvent être rejetées")
+        
+        # Mettre à jour le statut
+        application.status = CabinetApplicationStatus.REJECTED
+        
+        # Optionnel: ajouter la raison du rejet dans les qualifications
+        if reason:
+            application.qualifications = f"Rejetée: {reason}"
+        
+        await self.session.commit()
+        await self.session.refresh(application)
+        
+        return CabinetApplicationOut.model_validate(application.model_dump())
 
 class ApplicationFeeService:
     def __init__(self, session: AsyncSession):

@@ -250,7 +250,7 @@ async def get_job_application_route(
         )
     return {"message": "Job application fetched successfully", "data": full_application}
 
-@router.post("/job-attachments", response_model=JobAttachmentOutSuccess, tags=["Job Attachment"])
+@router.post("/job-attachments", response_model=JobAttachmentListOutSuccess, tags=["Job Attachment"])
 async def create_attachment(
     name: str = Form(...),
     file: UploadFile = File(...),
@@ -259,7 +259,7 @@ async def create_attachment(
     # Créer l'objet JobAttachmentInput manuellement
     input_data = JobAttachmentInput(name=name, file=file)
     attachment = await job_offer_service.create_job_attachment(input_data)
-    return {"message": "Attachment created successfully", "data": attachment}
+    return {"message": "Attachment created successfully", "data": [attachment]}
 
 # Job Attachments
 @router.get("/job-applications/{application_id}/attachments", response_model=JobAttachmentListOutSuccess, tags=["Job Attachment"])

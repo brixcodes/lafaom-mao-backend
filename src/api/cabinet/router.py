@@ -160,6 +160,22 @@ async def get_paid_cabinet_applications(
     applications = await service.get_paid_applications(skip=skip, limit=limit)
     return applications
 
+@router.get("/my-applications", response_model=List[CabinetApplicationOut])
+async def get_my_cabinet_applications(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session_async)
+):
+    """Récupérer les candidatures de l'utilisateur connecté"""
+    service = CabinetApplicationService(session)
+    applications = await service.get_my_applications(
+        user_email=current_user.email, 
+        skip=skip, 
+        limit=limit
+    )
+    return applications
+
 @router.get("/stats/overview", response_model=CabinetApplicationStats)
 async def get_application_stats(
     current_user: User = Depends(get_current_active_user),
@@ -169,6 +185,39 @@ async def get_application_stats(
     service = CabinetApplicationService(session)
     stats = await service.get_applications_stats()
     return stats
+
+@router.patch("/{application_id}/approve", response_model=CabinetApplicationOut)
+async def approve_cabinet_application(
+    application_id: str,
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session_async)
+):
+    """Approuver une candidature de cabinet"""
+    try:
+        service = CabinetApplicationService(session)
+        application = await service.approve_application(application_id)
+        return application
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erreur interne: {str(e)}")
+
+@router.patch("/{application_id}/reject", response_model=CabinetApplicationOut)
+async def reject_cabinet_application(
+    application_id: str,
+    reason: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session_async)
+):
+    """Rejeter une candidature de cabinet"""
+    try:
+        service = CabinetApplicationService(session)
+        application = await service.reject_application(application_id, reason)
+        return application
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erreur interne: {str(e)}")
 
 # Endpoints pour les frais de candidature
 
