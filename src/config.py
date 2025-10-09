@@ -117,8 +117,8 @@ class Settings(BaseSettings):
     CINETPAY_MASTERCARD_SECURED: bool = True
     
     ## CinetPay Card Payment Settings
-    CINETPAY_CARD_MIN_AMOUNT: int = 100  # Montant minimum pour les paiements par carte (en centimes)
-    CINETPAY_CARD_MAX_AMOUNT: int = 1000000  # Montant maximum pour les paiements par carte (en centimes)
+    CINETPAY_CARD_MIN_AMOUNT: int = 1  # Montant minimum pour les paiements par carte (en centimes) - 1 centime
+    CINETPAY_CARD_MAX_AMOUNT: int = 999999999  # Montant maximum pour les paiements par carte (en centimes) - Pas de limite pratique
     CINETPAY_CARD_CURRENCY: str = "XAF"  # Devise pour les paiements par carte
     
     CURRENCY_API_KEY : str | None = None
