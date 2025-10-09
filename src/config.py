@@ -106,8 +106,8 @@ class Settings(BaseSettings):
     CINETPAY_CURRENCY: str = "XAF"
     
     ## CinetPay Payment Channels Configuration
-    # Canaux de paiement disponibles : MOBILE_MONEY, WALLET, CARD, VISA, MASTERCARD
-    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET,CARD,VISA,MASTERCARD"
+    # Canaux de paiement disponibles : MOBILE_MONEY, WALLET, CREDIT_CARD, INTERNATIONAL_CARD
+    CINETPAY_CHANNELS: str = "MOBILE_MONEY,WALLET,CREDIT_CARD,INTERNATIONAL_CARD"
     
     ## CinetPay Card Payments Configuration
     CINETPAY_ENABLE_CARD_PAYMENTS: bool = True
