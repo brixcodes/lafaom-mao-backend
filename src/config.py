@@ -84,8 +84,8 @@ class Settings(BaseSettings):
     STORAGE_LOCATION: Literal["local","S3"] = "local"  #local,S3
     
     
-    #Max file upload size
-    MAX_FILE_SIZE: int = 4343455
+    #Max file upload size (20MB for PDF documents)
+    MAX_FILE_SIZE: int = 20971520
     
     
     ## Credential to connect to AWS S3 Bucket
