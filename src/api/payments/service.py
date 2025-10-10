@@ -16,6 +16,12 @@ from src.api.payments.schemas import CinetPayInit, PaymentFilter, PaymentInitInp
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session, get_session_async
+from src.api.user.models import User, UserStatusEnum, UserTypeEnum
+from src.api.user.schemas import CreateUserInput
+from src.api.user.service import UserService
+from src.helper.notifications import NotificationService
+import secrets
+import string
 from src.redis_client import get_from_redis, set_to_redis
 
 
@@ -377,6 +383,8 @@ class PaymentService:
                         job_application.payment_id = payment.id
                         session.commit()
                         session.refresh(job_application)
+                        # Créer automatiquement un compte utilisateur pour le candidat
+                        PaymentService._create_job_application_user_sync_static(job_application, session)
                     
                     elif payment.payable_type == "StudentApplication":
                         statement = select(StudentApplication).where(StudentApplication.id == int(payment.payable_id))
@@ -629,4 +637,82 @@ class CinetPayService:
         
         return cinetpay_payment.scalars().first()
     
+    @staticmethod
+    def _create_job_application_user_sync_static(job_application: JobApplication, session: Session) -> None:
+        """Créer un compte utilisateur pour le candidat d'emploi après paiement confirmé (version synchrone)"""
+        try:
+            # Générer un nom d'utilisateur unique
+            username = f"candidate_{job_application.first_name.lower()}_{job_application.last_name.lower()}_{job_application.id}"
+            
+            # Générer un mot de passe temporaire
+            temp_password = PaymentService._generate_temp_password_static()
+            
+            # Créer l'utilisateur directement
+            from src.api.user.models import User
+            from datetime import datetime
+            
+            user = User(
+                first_name=job_application.first_name,
+                last_name=job_application.last_name,
+                email=job_application.email,
+                mobile_number=job_application.phone_number,
+                status=UserStatusEnum.ACTIVE,
+                user_type=UserTypeEnum.STUDENT,
+                two_factor_enabled=False,
+                web_token=None,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            # Hasher le mot de passe
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            user.password_hash = pwd_context.hash(temp_password)
+            
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            
+            # Mettre à jour la candidature avec l'ID utilisateur
+            job_application.user_id = user.id
+            session.commit()
+            
+            # Envoyer les identifiants par email (version synchrone)
+            PaymentService._send_job_application_credentials_email_sync_static(job_application, username, temp_password)
+            
+            print(f"Compte utilisateur créé pour le candidat {job_application.first_name} {job_application.last_name}")
+            
+        except Exception as e:
+            print(f"Erreur lors de la création du compte utilisateur pour la candidature d'emploi: {e}")
+            raise e
+
+    @staticmethod
+    def _generate_temp_password_static(length: int = 12) -> str:
+        """Générer un mot de passe temporaire"""
+        characters = string.ascii_letters + string.digits + "!@#$%^&*"
+        return ''.join(secrets.choice(characters) for _ in range(length))
+
+    @staticmethod
+    def _send_job_application_credentials_email_sync_static(job_application: JobApplication, username: str, password: str) -> None:
+        """Envoyer les identifiants par email pour les candidatures d'emploi (version synchrone)"""
+        try:
+            from src.helper.notifications import JobApplicationCredentialsNotification
+            
+            # Créer la notification directement
+            notification = JobApplicationCredentialsNotification(
+                email=job_application.email,
+                username=username,
+                temporary_password=password,
+                candidate_name=f"{job_application.first_name} {job_application.last_name}",
+                login_url=f"{settings.BASE_URL}/auth/login"
+            )
+            
+            # Envoyer l'email avec les identifiants
+            notification.send_notification()
+            
+            print(f"Identifiants envoyés par email à {job_application.email}")
+            
+        except Exception as e:
+            print(f"Erreur lors de l'envoi de l'email: {e}")
+            raise e
 

@@ -20,7 +20,7 @@ class Post(CustomBaseModel, table=True):
     title: str = Field( max_length=255, index=True)
     slug : str = Field( max_length=255, index=True)
     cover_image: str = Field(default="", max_length=255)
-    summary: str = Field(default=None, max_length=255)
+    summary: str = Field(default=None, sa_column=Column(Text, nullable=True))
     published_at: Optional[datetime] = Field(default=None, nullable=True, sa_type=TIMESTAMP(timezone=True))
     tags: Optional[List[str]] = Field(
         sa_column=Column(JSON, nullable=False, default=[])

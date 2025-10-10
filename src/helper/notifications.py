@@ -238,6 +238,28 @@ class CabinetCredentialsNotification(NotificationBase):
             }
         }
 
+class JobApplicationCredentialsNotification(NotificationBase):
+    subject: str = "Identifiants de connexion - Candidature d'emploi LAFAOM"
+    email_template: str = "job_application_credentials.html"
+    username: str = ""
+    temporary_password: str = ""
+    login_url: str = ""
+    candidate_name: str = ""
+    
+    def email_data(self) -> dict:
+        return {
+            "to_email": self.email,
+            "subject": self.subject,
+            "template_name": self.email_template,
+            "lang": self.lang,
+            "context": {
+                "username": self.username,
+                "temporary_password": self.temporary_password,
+                "login_url": self.login_url,
+                "candidate_name": self.candidate_name
+            }
+        }
+
 class NotificationService:
     def __init__(self):
         pass
@@ -250,6 +272,17 @@ class NotificationService:
             temporary_password=credentials.temporary_password,
             login_url=credentials.login_url,
             company_name=credentials.company_name if hasattr(credentials, 'company_name') else "Cabinet"
+        )
+        return notification.send_notification()
+    
+    async def send_job_application_credentials_email(self, credentials_data):
+        """Envoyer les identifiants de connexion pour les candidatures d'emploi"""
+        notification = JobApplicationCredentialsNotification(
+            email=credentials_data["email"],
+            username=credentials_data["username"],
+            temporary_password=credentials_data["temporary_password"],
+            login_url=credentials_data["login_url"],
+            candidate_name=credentials_data["candidate_name"]
         )
         return notification.send_notification()
         
