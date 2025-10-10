@@ -171,17 +171,26 @@ async def create_job_application(
                 error_code=ErrorMessage.JOB_OFFER_CLOSED.value,
             ).model_dump(),
         )
-    lt = [val.name for val in input.attachments]
-    for attachment in job_offer.attachment:
+    # Vérifier que tous les attachments requis sont présents
+    if job_offer.attachment:
+        submitted_attachment_names = []
+        if input.attachments:
+            submitted_attachment_names = [val.name for val in input.attachments]
         
-        if attachment not in lt:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=BaseOutFail(
-                    message= f"Job attachment {attachment} is required",
-                    error_code=ErrorMessage.JOB_ATTACHMENT_REQUIRED.value,
-                ).model_dump(),
-            )
+        required_attachments = job_offer.attachment
+        print(f"DEBUG: Required attachments: {required_attachments}")
+        print(f"DEBUG: Submitted attachments: {submitted_attachment_names}")
+        
+        for required_attachment in required_attachments:
+            if required_attachment not in submitted_attachment_names:
+                print(f"DEBUG: Missing required attachment: {required_attachment}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=BaseOutFail(
+                        message=f"Job attachment '{required_attachment}' is required",
+                        error_code=ErrorMessage.JOB_ATTACHMENT_REQUIRED.value,
+                    ).model_dump(),
+                )
     
     application = await job_offer_service.create_job_application(job_offer=job_offer, data=input)
     
