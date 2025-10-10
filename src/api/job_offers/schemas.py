@@ -102,7 +102,7 @@ class JobAttachmentInput(BaseModel):
 class JobAttachmentInput2(BaseModel):
 
     name: str
-    url : str
+    type: str
 
 class JobApplicationCreateInput(BaseModel):
     job_offer_id: str

@@ -173,16 +173,16 @@ async def create_job_application(
         )
     # Vérifier que tous les attachments requis sont présents
     if job_offer.attachment:
-        submitted_attachment_names = []
+        submitted_attachment_types = []
         if input.attachments:
-            submitted_attachment_names = [val.name for val in input.attachments]
+            submitted_attachment_types = [val.type for val in input.attachments]
         
         required_attachments = job_offer.attachment
         print(f"DEBUG: Required attachments: {required_attachments}")
-        print(f"DEBUG: Submitted attachments: {submitted_attachment_names}")
+        print(f"DEBUG: Submitted attachments: {submitted_attachment_types}")
         
         for required_attachment in required_attachments:
-            if required_attachment not in submitted_attachment_names:
+            if required_attachment not in submitted_attachment_types:
                 print(f"DEBUG: Missing required attachment: {required_attachment}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
