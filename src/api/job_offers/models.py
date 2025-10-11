@@ -87,6 +87,7 @@ class JobAttachment(CustomBaseModel, table=True):
     application_id: Optional[int] = Field(foreign_key="job_applications.id", nullable=True)
     document_type: str = Field( max_length=100)
     file_path: str = Field(max_length=255)
+    name: str = Field(max_length=255, description="Nom du fichier")
 
 
 class JobApplicationCode(CustomBaseModel, table=True):

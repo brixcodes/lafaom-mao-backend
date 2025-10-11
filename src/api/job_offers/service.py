@@ -112,16 +112,15 @@ class JobOfferService:
         data_attachment = []
         
         for attachment in data.attachments:
-            
-            doc = await self.get_job_attachment_by_url(attachment.url)
-            if doc is None or doc.application_id is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=BaseOutFail(
-                        message=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.description + f" ({attachment})",
-                        error_code=ErrorMessage.JOB_ATTACHMENT_NOT_FOUND.value,
-                    ).model_dump(),
-                )
+            # Créer un nouvel objet JobAttachment avec les données fournies
+            doc = JobAttachment(
+                file_path=attachment.url,
+                document_type=attachment.type,
+                name=attachment.name
+            )
+            self.session.add(doc)
+            await self.session.commit()
+            await self.session.refresh(doc)
             data_attachment.append(doc)
         
         application_data = data.model_dump()
@@ -224,6 +223,7 @@ class JobOfferService:
         attachment = JobAttachment(
             file_path=cover_url,
             document_type=data.name,
+            name=data.name
         )
         self.session.add(attachment)
         await self.session.commit()

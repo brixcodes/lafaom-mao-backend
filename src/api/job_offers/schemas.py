@@ -103,6 +103,7 @@ class JobAttachmentInput2(BaseModel):
 
     name: str
     type: str
+    url: str
 
 class JobApplicationCreateInput(BaseModel):
     job_offer_id: str
@@ -149,8 +150,14 @@ class JobAttachmentOut(BaseModel):
     application_id: Optional[int]
     document_type: str
     file_path: str
+    name: str  # Nom du fichier
     created_at: datetime
     updated_at: datetime
+    
+    @property
+    def url(self) -> str:
+        """URL complète du fichier (alias pour file_path)"""
+        return self.file_path
 
 
 class JobApplicationOut(BaseModel):
