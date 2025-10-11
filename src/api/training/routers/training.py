@@ -108,6 +108,30 @@ async def list_training_sessions(
     return {"data": sessions, "page": filters.page, "number": len(sessions), "total_number": total}
 
 
+@router.get("/trainings/{training_id}/sessions", response_model=TrainingSessionsPageOutSuccess, tags=["Training Session"])
+async def get_training_sessions_by_training_id(
+    training_id: str,
+    filters: Annotated[TrainingSessionFilter, Query(...)],
+    training_service: TrainingService = Depends(),
+):
+    """Récupérer les sessions d'une formation par son ID"""
+    # Vérifier que la formation existe
+    training = await training_service.get_training_by_id(training_id)
+    if training is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message=ErrorMessage.TRAINING_NOT_FOUND.description,
+                error_code=ErrorMessage.TRAINING_NOT_FOUND.value,
+            ).model_dump(),
+        )
+    
+    # Ajouter le training_id aux filtres
+    filters.training_id = training_id
+    sessions, total = await training_service.list_training_sessions(filters)
+    return {"data": sessions, "page": filters.page, "number": len(sessions), "total_number": total}
+
+
 @router.post("/training-sessions", response_model=TrainingSessionOutSuccess, tags=["Training Session"])
 async def create_training_session(
     input: TrainingSessionCreateInput,
