@@ -167,3 +167,22 @@ async def read_organization_centers_by_location(
     organizations = await org_service.get_by_location(country_code=country_code, city=city)
     return {"data": organizations, "message": "Organization Centers fetched successfully"}
 
+@router.get("/organization-centers/{organization_id}/public", response_model=OrganizationCenterOutSuccess, tags=["Organization Centers"])
+async def read_organization_center_public(
+    organization_id: int,
+    org_service: OrganizationCenterService = Depends()
+):
+    """Get organization center by ID (public access)"""
+    
+    organization = await org_service.get_by_id(organization_id)
+    if not organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=BaseOutFail(
+                message=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.description,
+                error_code=ErrorMessage.ORGANIZATION_CENTER_NOT_FOUND.value
+            ).model_dump()
+        )
+    
+    return {"data": organization, "message": "Organization Center fetched successfully"}
+
