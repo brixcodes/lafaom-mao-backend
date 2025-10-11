@@ -181,10 +181,9 @@ async def delete_my_student_application(
 @router.get("/my-student-applications/{application_id}/attachments", response_model=StudentAttachmentListOutSuccess, tags=["My Student Application"])
 async def list_student_attachments(
     application_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
     student_app_service: StudentApplicationService = Depends(),
 ):
-    attachments = await student_app_service.list_attachments_by_application(application_id, user_id=current_user.id)
+    attachments = await student_app_service.list_attachments_by_application(application_id, user_id=None)
     return {"message": "Attachments fetched successfully", "data": attachments}
 
 # Student Attachments
@@ -192,7 +191,6 @@ async def list_student_attachments(
 async def create_student_attachment(
     application_id: int,
     input : Annotated[StudentAttachmentInput,Form(...)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
     student_app_service: StudentApplicationService = Depends(),
 ):
     application = await student_app_service.get_student_application_by_id(application_id)
@@ -204,7 +202,7 @@ async def create_student_attachment(
                 error_code=ErrorMessage.STUDENT_APPLICATION_NOT_FOUND.value,
             ).model_dump(),
         )
-    attachment = await student_app_service.create_student_attachment(user_id= current_user.id, application_id=application_id, input = input)
+    attachment = await student_app_service.create_student_attachment(user_id= application.user_id, application_id=application_id, input = input)
     return {"message": "Attachment created successfully", "data": attachment}
 
 @router.delete("/my-student-attachments/{attachment_id}", response_model=StudentAttachmentOutSuccess, tags=["My Student Application"])
