@@ -51,6 +51,8 @@ base_url = "/api/v1"
 
 # CORS configuration
 origins = [
+    "https://www.lafaom-mao.org",
+    "https://lafaom-bioforce.vercel.app",
     "https://lafaom-mao.org",
     "https://lafaom.netlify.app",
     "https://admin.lafaom-mao.org",
