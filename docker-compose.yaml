@@ -53,7 +53,7 @@
 #   database_network:
 #     name: afrolancer_backend_database_network
 #     external: true
-#   redis_network:
+#   redis_network:mlkl
 
 
 
