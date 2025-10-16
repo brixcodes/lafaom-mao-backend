@@ -5,8 +5,6 @@ x-app-base: &app-base
   image: lafaom_base_app
   env_file:
     - .env
-  volumes:
-    - .:/app
   networks:
     - lafaom_network
   depends_on:
