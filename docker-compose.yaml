@@ -55,6 +55,8 @@
 #     external: true
 #   redis_network:
 
+
+
 version: "3.8"
 
 x-app-base: &app-base
@@ -132,11 +134,26 @@ services:
       - database_network
     restart: unless-stopped
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - database_network
+      - redis_network
+    restart: unless-stopped
+
 volumes:
   celery-beat:
   app-uploads:
   app-uploads-2:
   postgres_data:
+  portainer_data:
 
 networks:
   database_network:
