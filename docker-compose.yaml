@@ -55,8 +55,6 @@
 #     external: true
 #   redis_network:
 
-
-
 version: "3.8"
 
 x-app-base: &app-base
@@ -120,6 +118,20 @@ services:
       - app-uploads:/app/src/static/uploads
       - app-uploads-2:/app/src/uploads
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: lafaom_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@lafaom.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - database_network
+    restart: unless-stopped
+
 volumes:
   celery-beat:
   app-uploads:
@@ -129,5 +141,3 @@ volumes:
 networks:
   database_network:
   redis_network:
-
-
