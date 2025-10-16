@@ -1,3 +1,64 @@
+# x-app-base: &app-base
+#   build: .
+#   image: lafaom_base_app
+#   env_file:
+#     - .env
+#   volumes:
+#     - .:/app
+#   networks:
+#     - database_network
+#     - redis_network
+
+
+# services:
+  
+#   redis:
+#     image: redis:7.0.8-alpine
+#     networks:
+#       - redis_network
+
+#   celery_worker:
+#     <<: *app-base
+#     command: /start-celeryworker
+#     depends_on:
+#       - redis
+
+#   celery_beat:
+#     <<: *app-base
+#     command: /start-celerybeat
+#     depends_on:
+#       - redis
+#     volumes:
+#       - .:/app
+#       - celery-beat:/app/celerybeat
+
+#   app:
+#     <<: *app-base
+#     command: /start
+#     ports:
+#       - "7051:8000"
+#     volumes:
+#       - .:/app
+#       - app-uploads:/app/src/static/uploads
+#       - app-uploads-2:/app/src/uploads
+
+
+# volumes:
+#     celery-beat:
+#     app-uploads:
+#     app-uploads-2:
+
+# networks:
+  
+#   database_network:
+#     name: afrolancer_backend_database_network
+#     external: true
+#   redis_network:
+
+
+
+version: "3.8"
+
 x-app-base: &app-base
   build: .
   image: lafaom_base_app
@@ -9,9 +70,21 @@ x-app-base: &app-base
     - database_network
     - redis_network
 
-
 services:
-  
+  db:
+    image: postgres:15
+    container_name: lafaom_postgres
+    environment:
+      POSTGRES_USER: afrolancer
+      POSTGRES_PASSWORD: AZERTY
+      POSTGRES_DB: lafaom_mao
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - database_network
+    ports:
+      - "5432:5432"
+
   redis:
     image: redis:7.0.8-alpine
     networks:
@@ -22,12 +95,14 @@ services:
     command: /start-celeryworker
     depends_on:
       - redis
+      - db
 
   celery_beat:
     <<: *app-base
     command: /start-celerybeat
     depends_on:
       - redis
+      - db
     volumes:
       - .:/app
       - celery-beat:/app/celerybeat
@@ -37,22 +112,22 @@ services:
     command: /start
     ports:
       - "7051:8000"
+    depends_on:
+      - redis
+      - db
     volumes:
       - .:/app
       - app-uploads:/app/src/static/uploads
       - app-uploads-2:/app/src/uploads
 
-
 volumes:
-    celery-beat:
-    app-uploads:
-    app-uploads-2:
+  celery-beat:
+  app-uploads:
+  app-uploads-2:
+  postgres_data:
 
 networks:
-  
   database_network:
-    name: afrolancer_backend_database_network
-    external: true
   redis_network:
 
 
