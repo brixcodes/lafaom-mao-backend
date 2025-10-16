@@ -72,7 +72,6 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - .:/app
       - lafaom_celery_beat:/app/celerybeat
     restart: unless-stopped
 
@@ -88,7 +87,6 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - .:/app
       - lafaom_app_uploads:/app/src/static/uploads
       - lafaom_app_uploads_2:/app/src/uploads
     healthcheck:
