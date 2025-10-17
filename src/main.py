@@ -53,6 +53,8 @@ base_url = "/api/v1"
 origins = [
     "https://www.lafaom-mao.org",
     "https://lafaom-bioforce.vercel.app",
+    "https://lafaom-bioforce-git-main-nanyang-brices-projects-daa29c6d.vercel.app",
+    "https://lafaom-bioforce-hi1zi9iri-nanyang-brices-projects-daa29c6d.vercel.app",
     "https://lafaom-mao.org",
     "https://lafaom.netlify.app",
     "https://admin.lafaom-mao.org",
@@ -70,7 +72,7 @@ origins = [
     "http://127.0.0.1:5500",
     "https://vitrine-lafaom.vercel.app",
     "https://www.lafaom.vertex-cam.com/",
-    "https://lafaom.vertex-cam.com",
+    "http://194.238.25.170:7052",
 ]
 
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)

@@ -220,9 +220,9 @@ class CabinetApplicationService:
             "description": f"Frais de candidature cabinet LAFAOM - {application.company_name}",
             "customer_email": application.contact_email,
             "customer_name": application.company_name,
-            "return_url": f"https://lafaom.vertex-cam.com/cabinet-application/success/{application_id}",
-            "cancel_url": f"https://lafaom.vertex-cam.com/cabinet-application/cancel/{application_id}",
-            "webhook_url": "https://lafaom.vertex-cam.com/api/v1/cabinet-application/payment-webhook"
+            "return_url": f"http://194.238.25.170:7052/cabinet-application/success/{application_id}",
+            "cancel_url": f"http://194.238.25.170:7052/cabinet-application/cancel/{application_id}",
+            "webhook_url": "http://194.238.25.170:7052/api/v1/cabinet-application/payment-webhook"
         }
         
         # Initier le paiement avec CinetPay
@@ -338,7 +338,7 @@ class CabinetApplicationService:
                 base_url = str(request.base_url).rstrip('/')
             else:
                 # Fallback si pas de request disponible
-                base_url = "https://lafaom.vertex-cam.com"
+                base_url = "http://194.238.25.170:7052"
             
             credentials = CabinetApplicationCredentials(
                 email=application.contact_email,

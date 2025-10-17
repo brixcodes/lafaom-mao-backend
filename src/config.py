@@ -101,8 +101,8 @@ class Settings(BaseSettings):
     CINETPAY_API_KEY: str = "59010686468150a4a8f1469.76140264"
     CINETPAY_SITE_ID: str = "105905268"
     CINETPAY_SECRET_KEY: str | None = None
-    CINETPAY_NOTIFY_URL: str = "https://lafaom.vertex-cam.com/api/v1/payments/cinetpay/notify"
-    CINETPAY_RETURN_URL: str = "https://lafaom.vertex-cam.com"
+    CINETPAY_NOTIFY_URL: str = "http://194.238.25.170:7052/api/v1/payments/cinetpay/notify"
+    CINETPAY_RETURN_URL: str = "http://194.238.25.170:7052"
     CINETPAY_CURRENCY: str = "XAF"  # XAF pour le compte CinetPay
     
     ## CinetPay Payment Channels Configuration
