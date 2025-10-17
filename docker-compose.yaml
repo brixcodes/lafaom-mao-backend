@@ -101,12 +101,12 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@lafaom.com
       PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
-      - "8081:80"
+      - "8081:80" # <- conserve le port interne à 80 (nécessaire pour pgAdmin), mais exposé sur 8081 seulement
+    networks:
+      - lafaom_network
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - lafaom_network
     restart: unless-stopped
 
   portainer:
